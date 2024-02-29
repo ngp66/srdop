@@ -20,13 +20,17 @@ Basic example is run using ./c2HTC.py (or python c2HTC.py).
 - HTC.omega(K) defines dispersion of model
 - HTC.eoms() defines equations of motion as in cumulant_in_code.pdf note
 - HTC.incoherent_state() defines the initial Gaussian exciton population
+- HTC.record_observables() - calls functions to calculate observables from state
+  at each timestep. N.B. States are not saved; observables must be calculated
+  and stored during runtime.
 - Key computational parameters are number of modes Nk and number of vibrational
   levels; anything more than Nnu=3 or 4 is going to take a lot of RAM (see Fig.
 6.12 of thesis). Thesis used Nk=301, Nnu=4, but lower during testing.
 
 cumulant_in_code.pdf
 --------------------
-Summary of notations for cumulant equations and coefficients used in the code.
+Summary of notations for cumulant equations and coefficients used in the code
+(which isn't in the thesis explicitly).
 
 
 Requirements
