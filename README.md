@@ -24,6 +24,10 @@ Basic example is run using ./c2HTC.py (or python c2HTC.py).
   levels; anything more than Nnu=3 or 4 is going to take a lot of RAM (see Fig.
 6.12 of thesis). Thesis used Nk=301, Nnu=4, but lower during testing.
 
+cumulant_in_code.pdf
+--------------------
+Summary of notations for cumulant equations and coefficients used in the code.
+
 
 Requirements
 ------------
