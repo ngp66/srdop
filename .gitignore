@@ -3,3 +3,4 @@ figures/
 *.png
 *.pkl
 *.npy
+__pycache__/
