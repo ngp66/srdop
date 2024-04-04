@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 from matplotlib import colormaps
 import logging, pickle, os, sys
 from opt_einsum import contract
-from gmanp import pBasis, Pauli, Boson
 from time import time
 from pprint import pprint, pformat
 from copy import copy
@@ -21,6 +20,12 @@ except ModuleNotFoundError:
     pass
 
 logger = logging.getLogger(__name__)
+
+try:
+    from gmanp import pBasis, Pauli, Boson
+except ModuleNotFoundError:
+    logger.critical('gmanp.py not found in current working directory')
+    sys.exit(1)
 
 plt.rcParams.update({
     "text.usetex": True,
