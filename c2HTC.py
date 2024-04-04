@@ -35,24 +35,24 @@ class HTC:
     EV_TO_FS = (constants.hbar/constants.e)*1e15 # convert time in electronvolts to time in fs
     DEFAULT_DIRS = {'data':'./data', 'figures':'./figures'} # output directories
     DEFAULT_PARAMS = {
-            'Q0': 15, # N_k = 2*Q0+1 nanoparticles
-            'NE': 2, # Number of emitters per gap
+            'Q0': 61, # N_k = 2*Q0+1 nanoparticles (123)
+            'NE': 4, # Number of emitters per gap
             'w': 1, # Gap width, nm (Emitter spacing Delta_r = 2a+w = 81nm)
             'a': 40, # Nanoparticle radius, nm (Chain length L = N_k * Delta_r = 10.0 nm)
-            'omega_p': 1.88, # Plasmon reaonsnce, eV
+            'omega_p': 1.88, # Plasmon resonance, eV
             'omega_0': 1.86, # Dye resonance, eV
-            'g': 0.095, # Individual light-matter coupling, eV (collective gSqrt(NE)
-            'kappa': 1e-2, # photon loss
-            'dephase': 0, # Emitter pure dephasing
-            'pump_strength': 1e-3, # Emitter pump magnitude
-            'pump_width': 250, # Emitter pump spot width, nm
-            'decay': 1e-7, # Emitter non-resonant decay
+            'g': 0.095, # Individual light-matter coupling, eV (collective gSqrt(NE))
+            'kappa': 1e-01, # photon loss
+            'dephase': 0.0, # Emitter pure dephasing
+            'pump_strength': 1e-01, # Emitter pump magnitude
+            'pump_width': 500, # Emitter pump spot width, nm (approx. 6 nanoparticles)
+            'decay': 1e-01, # Emitter non-resonant decay
             'Nnu': 2, # Number of vibrational levels for each emitter
-            'S': 0.001, # Huang-Rhys parameter
+            'S': 0.01, # Huang-Rhys parameter
             'omega_nu': 0.19, # Vibrational mode resonance, eV
-            'T':0.026, # k_B T in eV (.0259=300K, .026=302K)
-            'gam_nu': 0.01, # vibrational damping rate
-            'dt': 0.5, # determines interval at which solution is evaluated. Does not effect the accuracy of solution, only the grid at which dynamics are recorded (if solver e.g. makes a step of 2*dt, interpolation is used to calculate inner points. 
+            'T':0.026, # k_B T in eV (.026=302K)
+            'gam_nu': 1e-03, # vibrational damping rate
+            'dt': 0.5, # interval at which solution is sampled. Does not affect accuracy of solution 
             }
 
     @classmethod
@@ -461,7 +461,6 @@ class HTC:
             end = False # flag to break integration loop
             rk45.step() # perform one step (necessary before call to dense_output())
             solver_t.append(rk45.t)
-            print(rk45.t, time()-tic)
             if rk45.t >= next_t: # solver has gone past one (or more) of our grid points, so now evaluate soln
                 soln = rk45.dense_output() # interpolation function for the last timestep
                 while rk45.t >= next_t: # until soln has been evaluated at all grid points up to solver time
