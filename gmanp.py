@@ -79,9 +79,9 @@ class pBasis:
         # num i_+: d(d-1)/2 = Nnu(2Nnu-1) = len(self.indices[1]) = len(self.indices[-1])
         saved_log_level = logger.level
         if verbose:
-            logger.setLevel(logging.INFO)
+            logger.setLevel(logging.DEBUG)
         else:
-            logger.setLevel(logging.WARNING) # disable info messages during object setup
+            logger.setLevel(logging.INFO) # disable info messages during object setup
         self.verbose = verbose # log info messages during setup
         self.basis = [] # list of basis vectors not including the identity
         # structure tensors, to be constructed or loaded from file
@@ -103,7 +103,7 @@ class pBasis:
             self.wrapit(self.perform_checks, f'Performing checks (basis numbers, orthogonality, product rules)...')
         logger.setLevel(saved_log_level)
         if not verbose:
-            logger.info(f'Setup {self.sl}x{self.sl} p-basis matrices')
+            logger.info(f'Setup {self.sl}x{self.sl} basis for emitters')
 
     def get_coefficients(self, mat, sgn=None, eye=False, warn=True, real=False):
         """Calculate coefficients of a matrix 'mat' in lambda basis
@@ -255,11 +255,11 @@ class pBasis:
 
     def wrapit(self, meth, msg, timeit=True):
         if msg:
-            logger.info(msg)
+            logger.debug(msg)
         t0 = time()
         meth()
         if timeit:
-            logger.info('...done ({:.2f}s)'.format(time()-t0))
+            logger.debug('...done ({:.2f}s)'.format(time()-t0))
 
     def perform_checks(self):
         self.check_basis_numbers()
@@ -341,13 +341,12 @@ class pBasis:
             for sig in self._d_tensors:
                 self._z_tensors[sig] = self._d_tensors[sig] + 1j * self._f_tensors[sig]
                 self._zm_tensors[sig] = self._d_tensors[sig].conj() + 1j * self._f_tensors[sig].conj()
-            logger.info(f'...loaded structure tensors from {tensor_fp}...')
+            logger.info(f'Loaded structure tensors from {tensor_fp}')
         sigs = [sig for sig in sigs if sig not in self._d_tensors]
         num_sigs = len(sigs)
         if num_sigs == 0:
-            logger.info(f'...no further computation required.')
             return
-        logger.info(f'...need to construct tensors for signatures {sigs}')
+        logger.info(f'Need to construct tensors for signatures {sigs}')
         t0 = time()
         for i, sig in enumerate(sigs):
             tot_time = time()-t0
@@ -408,6 +407,7 @@ class pBasis:
                 sparse_dicts[fd][key] = sparse.COO.from_numpy(dic[key])
         with open(fp, 'wb') as fb:
             pickle.dump(sparse_dicts, fb)
+        logger.info(f'Saved structure tensors to {fp}')
 
     def check_basis_numbers(self):
         self.num_0 = 2*self.Nnu**2-1

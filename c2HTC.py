@@ -3,27 +3,21 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import colormaps
-from matplotlib.ticker import MaxNLocator
-from scipy.signal import butter, filtfilt, lfilter, freqz, argrelextrema
-from scipy.optimize import curve_fit
 import logging, pickle, os, sys
 from opt_einsum import contract
 from gmanp import pBasis, Pauli, Boson
-from time import time, perf_counter, process_time, sleep
-from datetime import datetime, timedelta
+from time import time
 from pprint import pprint, pformat
 from copy import copy
-from scipy.integrate import solve_ivp, quad_vec, RK45
+from scipy.integrate import RK45
 SOLVER = RK45 # Runge-Kutta 4th order
 from mpmath import polylog
 from scipy import constants
-import itertools
-from scipy.fft import fft, fft2, ifft, ifft2, fftshift, ifftshift # recommended over numpy.fft
+from scipy.fft import fft, ifft, fftshift, ifftshift # recommended over numpy.fft
 try:
     import pretty_traceback
     pretty_traceback.install()
 except ModuleNotFoundError:
-    # colored traceback not supported
     pass
 
 logger = logging.getLogger(__name__)
@@ -45,15 +39,13 @@ class HTC:
             'NE': 2, # Number of emitters per gap
             'w': 1, # Gap width, nm (Emitter spacing Delta_r = 2a+w = 81nm)
             'a': 40, # Nanoparticle radius, nm (Chain length L = N_k * Delta_r = 10.0 nm)
-            #'Delta_r': 81, # Emitter spacing, nm
-            #'L': 9.963, # Chain length, micrometers 
             'omega_p': 1.88, # Plasmon reaonsnce, eV
             'omega_0': 1.86, # Dye resonance, eV
             'g': 0.095, # Individual light-matter coupling, eV (collective gSqrt(NE)
             'kappa': 1e-2, # photon loss
             'dephase': 0, # Emitter pure dephasing
             'pump_strength': 1e-3, # Emitter pump magnitude
-            'pump_width': 500, # Emitter pump spot width, nm
+            'pump_width': 250, # Emitter pump spot width, nm
             'decay': 1e-7, # Emitter non-resonant decay
             'Nnu': 2, # Number of vibrational levels for each emitter
             'S': 0.001, # Huang-Rhys parameter
@@ -79,9 +71,9 @@ class HTC:
         self.Ks, self.ks = self.get_modes()
         self.make_state_dic()
         self.ns = np.arange(self.Nk)
-        self.rs = self.ns * self.params['delta_r']
+        self.rs = self.ns * self.params['delta_r'] * 1e-3 # micrometers
         self.wrapit(self.make_coeffs, f'Constructing EoM coefficients...', timeit=False)
-        self.wrapit(self.create_initial_state, f'Creating initial state...', timeit=False)
+        self.create_initial_state()
         self.labels = self.get_labels()
 
     def parse_params(self, params):
@@ -223,7 +215,7 @@ class HTC:
                                      zip([self.dephase(self.ns), rates['gam_up'] * np.ones(Nk),
                                           rates['gam_down'] * np.ones(Nk)],[C1_base, C2_base, C3_base])])
         consts['gamp_n'] = np.outer(Dp_base, np.sqrt(self.pump(self.ns)))
-        consts['gamm_n'] = np.outer(Dm_base, np.sqrt(self.pump(self.ns)))
+        consts['gamm_n'] = np.outer(Dm_base, np.sqrt(self.decay(self.ns)))
         #
         consts['gam00_n'] = contract('arn,apn->rpn', consts['gam0_n'].conj(), consts['gam0_n'])
         consts['gampp_n'] = contract('in,jn->ijn', consts['gamp_n'].conj(), consts['gamp_n'])
@@ -358,13 +350,15 @@ class HTC:
     def kappa(self, K):
         return self.params['kappa'] * np.ones_like(K)
 
-    def gaussian(self, n, _max, _width, _offset=0):
-        n0 = self.Q0
+    def gaussian(self, r, _max, _width, _offset=0):
+        r0 = self.Q0 * self.params['delta_r'] + _offset
         #return self.params['pump_strength'] * np.ones_like(n) # uniform
-        return _max * np.exp(- 0.5 * ( (n-n0)/_width )**2 )
+        return _max * np.exp(- 0.5 * ( (r-r0)/_width )**2 )
 
     def pump(self, n):
-        return self.gaussian(n, self.params['pump_strength'], self.params['pump_width'])
+        r = self.params['delta_r'] * n
+        #return self.params['pump_strength'] * np.ones_like(n)
+        return self.gaussian(r, self.params['pump_strength'], self.params['pump_width'])
 
     def decay(self, n):
         return self.params['decay'] * np.ones_like(n)
@@ -414,7 +408,7 @@ class HTC:
         self.initial_state = self.ground_state()
 
     def ground_state(self):
-        logger.info(f'Creating initial state with 0 photons/excitons + thermal vibrational state')
+        logger.info(f'Creating initial state with 0 photons/excitons + thermal vibrational populations')
         pex = 0.0 # initial excited state population of emitters
         rho0_ele = np.diag([pex,1.0-pex])
         rho0_vib = self.thermal_rho_vib(self.params['T']) # molecular vibrational density matrix
@@ -431,15 +425,15 @@ class HTC:
     def evolve(self, tend=100.0, atol=1e-8, rtol=1e-6):
         """Integrate second-order cumulants equations of motion from t=0 to  t=tend (femptoseconds)"""
         dt_fs = self.params['dt']
-        self.t_fs = np.arange(0.0, tend, step=dt_fs)
+        self.t_fs = np.arange(0.0, tend+dt_fs/2, step=dt_fs)
         self.t = self.t_fs / self.EV_TO_FS
         dt = dt_fs / self.EV_TO_FS
         self.num_t = len(self.t)
         state_MB = sys.getsizeof(self.initial_state) / 1024**2
-        logger.info(f'Number of variables {len(self.initial_state):.2e}, '\
-                f'estimate ~{8*state_MB:.0f} MB to propagate dynamics')
-        logger.info(f'Integrating 2nd-order EoMs to tend={tend:.0f}fs with interpolation'\
-                f' to fixed grid of spacing dt={dt:.3g}fs')
+        #logger.info(f'Number of variables {len(self.initial_state):.2e}, '\
+        #        f'estimate ~{8*state_MB:.0f} MB to propagate dynamics')
+        logger.info(f'Integrating 2nd-order EoMs to {tend:.0f}fs with interpolation'\
+                f' to fixed grid with dt={dt_fs:.3g}fs...')
         self.setup_dynamics_storage() # creates self.dynamics data dictionary
         #
         t_index = 0 # indicates current position in output grid of times
@@ -467,6 +461,7 @@ class HTC:
             end = False # flag to break integration loop
             rk45.step() # perform one step (necessary before call to dense_output())
             solver_t.append(rk45.t)
+            print(rk45.t, time()-tic)
             if rk45.t >= next_t: # solver has gone past one (or more) of our grid points, so now evaluate soln
                 soln = rk45.dense_output() # interpolation function for the last timestep
                 while rk45.t >= next_t: # until soln has been evaluated at all grid points up to solver time
@@ -479,9 +474,17 @@ class HTC:
                     next_t = self.t[t_index]
             if next_check_i < num_checkpoints and t_index >= checkpoints[next_check_i]:
                 solver_diffs = np.diff(solver_t[last_solver_i:])
-                logger.info('Progress {:.0f}% ({:.0f}s)'.format(100*(checkpoints[next_check_i]+1)/self.num_t, time()-tic))
-                logger.info('Avg. solver dt for last part: {:.2g} (grid dt_ds={:.3g}fs)'\
-                        .format(np.mean(solver_diffs) * self.EV_TO_FS, dt_fs))
+                logger.info('{:.0f}% ({:.0f}s)'.format(100*(checkpoints[next_check_i]+1)/self.num_t, time()-tic))
+                solver_dt = np.mean(solver_diffs)
+                if not np.isclose(solver_dt, dt, atol=0.0, rtol=1.0):
+                    if solver_dt < dt:
+                        logger.warning('Average solver step size {:.2g}fs is far smaller'\
+                            ' than target grid spacing {}fs. Consider decreasing parameter dt.'.format(
+                                solver_dt * self.EV_TO_FS, dt_fs))
+                    #elif solver_dt > 10.0 * dt:
+                    #    logger.warning('Average solver step size {:.2g}fs is far larger'\
+                    #        ' than target grid spacing {}fs. Consider increasing parameter dt.'.format(
+                    #            solver_dt * self.EV_TO_FS, dt_fs))
                 next_check_i += 1
                 last_solver_i = len(solver_t) - 1
             if end:
@@ -490,7 +493,7 @@ class HTC:
         self.compute_time = toc-tic # ptoc-ptic
         self.solver_info = {'method': 'RK45', 't0': 0.0, 'tend': tend, 'atol': atol, 'rtol': rtol,
                             'runtime': self.compute_time}
-        logger.info('...done ({:.0f}s)'.format(self.compute_time))
+        #logger.info('...done ({:.0f}s)'.format(self.compute_time))
         self.results = {'parameters': self.params,
                         'dynamics': self.dynamics,
                         'solver_info': self.solver_info,
@@ -549,16 +552,31 @@ class HTC:
         dft2 = fft(alpha, axis=-1)
         nph = np.diag(dft2) # n(r_n) when n=m
         self.check_real(t_index, nph, 'Photon density')
+        dft2 = fftshift(dft2)
         g1s = np.zeros(self.Nk, dtype=complex)
         mid_n = self.Q0
         for n in self.ns:
             numer = dft2[n, mid_n]
-            demon = np.sqrt(np.real(dft2[n,n]) * np.real(dft2[mid_n, mid_n]))
-            if np.isclose(demon, 0.0):
+            demon = np.sqrt(np.abs(np.real(dft2[n,n]) * np.real(dft2[mid_n, mid_n])))
+            if np.isclose(demon, 0.0, atol=1e-8):
+                #print('Nearly zero! t_index', t_index, '   n=', n)
                 g1s[n] = np.zeros_like(numer)
             else:
                 g1s[n] = numer/demon
-        # check g<=1 etc.
+        #if t_index==790:
+        #    # Snapshot in k-space, for debugging
+        #    fig, axes = plt.subplots(2,2, figsize=(8,8), constrained_layout=True)
+        #    extent = [self.Ks[0], self.Ks[-1], self.Ks[0], self.Ks[-1]]
+        #    cm = colormaps['coolwarm'] 
+        #    my_im = lambda axis, vals: axis.imshow(vals, origin='lower', aspect='auto',
+        #                                   interpolation='none', extent=extent, cmap=cm)
+        #    im0 = my_im(axes[0,0], np.real(fftshift(ada)))
+        #    im1 = my_im(axes[0,1], np.imag(fftshift(ada)))
+        #    cbar0 = fig.colorbar(im0, ax=axes[0,0], aspect=20)
+        #    cbar1 = fig.colorbar(im1, ax=axes[0,1], aspect=20)
+        #    axes[1,0].plot(self.Ks, np.real(nph))
+        #    fig.savefig('figures/photonic.png', dpi=350, bbox_inches='tight')
+        # check |g|<=1 etc.
         #self.check_real(t_index, g1s, 'First-order coherence')
         self.dynamics['nP'][t_index] = np.real(nph)
         self.dynamics['g1'][t_index] = g1s
@@ -627,6 +645,8 @@ class HTC:
         """Equations of motion as in cumulant_in_code.pdf"""
         C = self.coeffs
         ada, l, al, ll = self.split_reshape_return(state)
+#        if np.isclose(t%40, 0.0, atol=0.25):
+#            print('Maxes: ada {:.1g} l {:.1g} al {:.1g} ll {:.1g}'.format(*[np.max(np.abs(X)) for X in [ada, l, al, ll]]))
         # Calculate DFTs
         alpha = ifft(ada, axis=0, norm='forward')
         d = fft(al, axis=1, norm='backward') # backward default
@@ -673,7 +693,7 @@ class HTC:
         if not os.path.exists(os.path.dirname(fp)):
             os.makedirs(os.path.dirname(fp))
         with open(fp, 'wb') as fb:
-            pickle.dump(self.dynamics, fb)
+            pickle.dump(self.results, fb)
         logger.info(f'Wrote parameters & dynamics data to {fp}')
 
     def import_data(self, fp=None):
@@ -692,9 +712,10 @@ class HTC:
         return {'K': r'\(K\)',
                 't': r'\(t\)',
                 't_fs': r'\(t\) \rm{(fs)}',
+                #'rn': r'\(r_n\) \rm{(nm)}',
                 'rn': r'\(r_n\) \rm{(}\(\mu\)\rm{m)}',
-                'ph_rn': r'\(n_{\rm{\text{ph}}}(t, r_n)\)',
-                'ph_rn0': r'\(n_{\rm{\text{ph}}}(t, r_n)-n_{\rm{\text{ph}}}(0, r_n) \)',
+                'ph_rn': r'\(n_{\rm{\text{\rm{ph}}}}(t, r_n)\)',
+                'ph_rn0': r'\(n_{\rm{\text{\rm{ph}}}}(t, r_n)-n_{\rm{\text{ph}}}(0, r_n) \)',
                 'ph_rms': r'\(\sqrt{\text{\rm{MSD}}[n_{\text{ph}}]}\) \rm{(}\(\mu\)\rm{m}\({}^2\)\rm{)}',
                 'mol_rn': r'\(n_{M}(t, r_n)\)',
                 'mol_rn0': r'\(n_{M}(t, r_n)-n_M(0,r_n)\)',
@@ -710,52 +731,103 @@ class HTC:
                 'DnB': r'\(\Delta n_{\mathcal{B}}\)',
                 'DnD': r'\(\Delta n_{\mathcal{D}}\)',
                 'D': r'\(\Delta n_X(t) = \sum_{n} \left(n_X(t, r_n) - n_X(0, r_n)\right)\)',
+                'Eph': r'\(n_{\text{\rm{ph}}}\)',
+                'EnM': r'\( n_{M}\)',
+                'EnB': r'\( n_{\mathcal{B}}\)',
+                'EnD': r'\( n_{\mathcal{D}}\)',
+                'E': r'\(n_X(t) = \sum_{n} n_X(t, r_n)\)',
                 }
-    def plot_all(self):
-        fig, axes = plt.subplots(5,2,figsize=(8,18))
-        fig.suptitle(r'\texttt{{c2v2 {}}}'.format(datetime.now().strftime('%Y-%m-%d %H:%M')), y=0.925) 
-        plt.subplots_adjust(wspace=0.25, hspace=0.35)
+
+    def plot_final_state(self):
+        fig = plt.figure(figsize=(8,8), constrained_layout=True)
+        gs = fig.add_gridspec(2,2)
+        ax1 = fig.add_subplot(gs[0, 0])
+        ax2 = fig.add_subplot(gs[0, 1])
+        ax3 = fig.add_subplot(gs[1, :])
+        fig.suptitle(r'Final $t={}$ fs'.format(self.dynamics['t'][-1]))
+        ax1.plot(self.rs, self.dynamics['nP'][-1], label=self.labels['Eph'])
+        ax1.plot(self.rs, self.dynamics['nM'][-1], label=self.labels['EnM'])
+        ax1.set_xlabel(self.labels['rn'])
+        ax1.legend()
+        final_vpops = self.dynamics['vpop'][-1]
+        for i in range(self.Nnu):
+            ax2.plot(self.rs, final_vpops[:,i], label=r'$i={}$'.format(i))
+        ax2.legend(title='level $i$')
+        ax2.set_xlabel(self.labels['rn'])
+        ax2.set_title(r'Vibrational populations')
+        ax3.plot(self.rs, np.abs(self.dynamics['g1'][-1]), label=r'$\lvert g^{(1)}(r_n) \rvert$')
+        #ax3.set_title(r'$\lvert g^{(1)}(r_n) \rvert$')
+        all_ns = np.linspace(0, self.Nk, 250)
+        all_rs = self.params['delta_r'] * all_ns * 1e-03
+        all_pumps = self.pump(all_ns)
+        ax3.plot(all_rs, all_pumps/np.max(all_pumps), ls='--', c='k',
+                 label=r'$\Gamma_\uparrow(r_n)/\Gamma_\uparrow(0)$')
+        ax3.set_xlabel(self.labels['rn'])
+        ax3.legend()
+        fp = os.path.join(self.DEFAULT_DIRS['figures'], 'final_state.png')
+        fig.savefig(fp, bbox_inches='tight', dpi=350)
+        logger.info(f'Final state plots saved to {fp}.')
+        plt.close(fig)
+
+    def plot_dynamics(self):
+        fig, axes = plt.subplots(2, 2, figsize=(8,8), constrained_layout=True)
+        axes[0,0].set_xlabel(self.labels['rn'])
+        axes[0,0].set_ylabel(self.labels['t_fs'])
+        axes[0,1].set_xlabel(self.labels['rn'])
+        axes[0,1].set_ylabel(self.labels['t_fs'])
+        t_fs = self.dynamics['t']
+        axes[0,0].set_title(self.labels['ph_rn'])
+        axes[0,1].set_title(self.labels['mol_rn0'])
+        extent = [0, 1.01*self.params['L']*1e-3, t_fs[0], t_fs[-1]]
+        cm = colormaps['coolwarm'] 
+        my_im = lambda axis, vals: axis.imshow(vals, origin='lower', aspect='auto',
+                                           interpolation='none', extent=extent, cmap=cm)
+        im0 = my_im(axes[0,0], self.dynamics['nP'])
+        #zeroed_nM = self.dynamics['nM'] - self.dynamics['nM'][0,:] # subtract initial pops
+        #im1 = my_im(axes[0,1], zeroed_nM)
+        im1 = my_im(axes[0,1], self.dynamics['nM'])
+        cbar0 = fig.colorbar(im0, ax=axes[0,0], aspect=20)
+        cbar1 = fig.colorbar(im1, ax=axes[0,1], aspect=20)
+        nPh_tots = np.sum(self.dynamics['nP'], axis=-1)
+        nM_tots = np.sum(self.dynamics['nM'], axis=-1)
+        nB_tots = np.sum(self.dynamics['nB'], axis=-1)
+        nD_tots = nM_tots - nB_tots
+        axes[1,0].plot(t_fs, nPh_tots, label=self.labels['Eph'])
+        axes[1,0].plot(t_fs, nM_tots, label=self.labels['EnM'])
+        axes[1,0].plot(t_fs, nB_tots, label=self.labels['EnB'])
+        axes[1,0].plot(t_fs, nD_tots, label=self.labels['EnD'])
+        axes[1,0].set_title(self.labels['E'])
+        axes[1,0].set_xlabel(self.labels['t_fs'])
+        axes[1,0].legend()
+        self.plot_parameters(axes[1,1])
+        fp = os.path.join(self.DEFAULT_DIRS['figures'], 'dynamics.png')
+        fig.savefig(fp, bbox_inches='tight', dpi=350)
+        logger.info(f'Dynamics plots saved to {fp}.')
+        plt.close(fig)
+
+    def plot_parameters(self, ax):
         params = self.params
-        # PANEL A - initial profile with dispersion inset
-        n1, pex1, n2, pex2 = self.plot_initial_profile(data_only=True)
-        k1, w1, k2, w2 = self.plot_dispersion(data_only=True)
-        axes[0,0].set_title(r'\(p^\uparrow_n(0, r_n)\)', y=1.0)
-        axes[0,0].plot(self.params['delta_r'] * n1, pex1, ls='--')
-        axes[0,0].scatter(self.params['delta_r'] * n2, pex2, marker='.', c='r', s=75, zorder=2)
-        axes[0,0].xaxis.set_major_locator(MaxNLocator(integer=True))
-        L = self.params['L']
-        axes[0,0].set_xlim([None,L*1.0425])
-        axes[0,0].set_xticks([0,L/4,L/2,3*L/4,L])
-        axes[0,0].set_xticklabels(['\(0\)','\(L/4\)','\(L/2\)','\(3L/4\)','\(L\)'])
-        ax1in = axes[0,0].inset_axes([0.7,0.7,0.25,0.25])
-        ax1in.plot(k1, w1, c='orange')
-        ax1in.scatter(k2, w2, c='k', s=5, zorder=2)
-        #ax1in.set_yticks([L for L in ax1in.get_yticks()])
-        #ax1in.set_yticklabels([r'\({:.2f}\)'.format(L) for L in ax1in.get_yticks()])
-        # PANEL B - parameters
-        #relevant_parameters = \
+        L = params['L'] * 1e-3
         size_params = \
             [#r'\rm{Size}',
-             r'\(N_m=10^{{{:.0f}}}\qquad L={:.0f}\mu\text{{m}}\)'.format(np.log10(self.Nm), L),
-             r'\(N_k={}\)\qquad\(N_\nu={}\)'.format(self.Nk, self.Nnu),
-             #r'\(N_\nu={}\)'.format(self.Nnu),
+             r'\(N_E={}\quad N_k={}\quad N_\nu={}\)'.format(self.NE, self.Nk, self.Nnu),
+             r'\(a={:.0f} \text{{\rm{{nm}}}}\quad w={:.0f} \text{{\rm{{nm}}}}\quad L={:.0f} \mu\text{{\rm{{m}}}}\)'.format(params['a'], params['w'], L),
             ]
         sys_params = \
             [
              #'\n',
              r'\rm{System (eV)}',
-             r'\(\omega_c={}\), \(\epsilon={}\)'.format(params['omega_c'], params['omega_0']),
-             #r'\(\omega_c={}\)'.format(params['omega_c']),
-             #r'\(\epsilon={}\)'.format(params['omega_0']),
-             r'\(n_r={}\)'.format(params['nr']),
-             r'\(g\sqrt{{N_m}}={:.3g}\)'.format(params['gSqrtNE']),
+             r'\(\omega_p={}\)'.format(params['omega_p']),
+             r'\(\omega_0={}\)'.format(params['omega_0']),
+             r'\(g={:.3g}\)'.format(params['g']),
+             r'\(g\sqrt{{N_E}}={:.3g}\)'.format(params['gSqrtNE']),
             ]
         rate_params = \
             [
              #'\n',
              r'\rm{Rates (eV)}',
              r'\(\kappa={}\)'.format(params['kappa']),
-             r'\(\Gamma_\uparrow={}\)'.format(params['pump_strength']),
+             r'\(\Gamma_\uparrow(0)={}\)'.format(params['pump_strength']),
              r'\(\Gamma_\downarrow={}\)'.format(params['decay']),
              r'\(\Gamma_z={}\)'.format(params['dephase']),
             ]
@@ -771,378 +843,84 @@ class HTC:
              r'\(S={}\)'.format(params['S']),
              r'\(\omega_\nu={}\)'.format(params['omega_nu']),
              r'\(T={}\)'.format(params['T']),
-             #r'\(\gamma_\nu (\gamma_\uparrow, \gamma_\downarrow)={}\ ({:.1e}, {:.1e})\)'.format(
-             #    params['gam_nu'], self.rates['gam_up'], self.rates['gam_down']),
              r'\(\gamma_\nu={}\)'.format(params['gam_nu']),
              r'\(\gamma_\uparrow= \) {}'.format(pow_str(self.rates['gam_up'])),
              r'\(\gamma_\downarrow= \) {}'.format(pow_str(self.rates['gam_down'])),
              ]
-        numeric_params = \
-            [
-             #'\n',
-             r'\rm{Computation}',
-             r'\rm{{atol}} \(=\) {}'.format(pow_str(params['atol'], prec=0)),
-             r'\rm{{rtol}} \(=\) {}'.format(pow_str(params['rtol'], prec=0)),
-             #r'\rm{{runtime}} \(={:.1f}\)s'.format(self.compute_time),
-             r'\rm{{runtime:}} {}'.format(timedelta(seconds=round(self.compute_time))),
-             # Scaling string
-             ]
-        axes[0,1].get_xaxis().set_visible(False)
-        axes[0,1].get_yaxis().set_visible(False)
-        axes[0,1].text(0.5, 0.975, '\n'.join(size_params),
-                       ha='center', va='top', transform=axes[0,1].transAxes, size='small') # axis coords
-        axes[0,1].text(0.25, 0.8, '\n'.join(sys_params),
-                       ha='center', va='top', transform=axes[0,1].transAxes, size='small') # axis coords
-        axes[0,1].text(0.75, 0.8, '\n'.join(rate_params),
-                       ha='center', va='top', transform=axes[0,1].transAxes, size='small') # axis coords
-        axes[0,1].text(0.25, 0.5, '\n'.join(bath_params),
-                       ha='center', va='top', transform=axes[0,1].transAxes, size='small') # axis coords
-        axes[0,1].text(0.75, 0.375, '\n'.join(numeric_params),
-                       ha='center', va='top', transform=axes[0,1].transAxes, size='small') # axis coords
-        # PANEL C and D - PHOTON and EXCITON DYNAMICS
-        plot_t = self.dynamics['t_fs']
-        axes[1,0].set_title(r'\(\sum_k  \langle a^\dagger_k a^{\vphantom{\dagger}}_k\rangle\)', y=1.0)
-        kap = self.params['kappa']
-        if np.isclose(kap, 0.0):
-            kap_str = r'\(\kappa\sim\infty\)'
-        else:
-            kap_str = r'\(1/\kappa\sim{:.0f}\) \rm{{fs}}'.format(round((1/self.params['kappa'])*self.EV_TO_FS,-2))
-        axes[1,0].annotate(\
-                kap_str,
-                #+'\n'\
-                #+r'\(1/\Gamma_{{\downarrow}}\sim{:.0e}\) \rm{{fs}}'.format(round((1/self.params['Gam_down'])*self.EV_TO_FS, -1)),
-                           #xy=(0.5,.8),
-                           xy=(.625,.875),
-                           xycoords='axes fraction',
-                           xytext=(0,0),
-                           textcoords='offset points',
-                           size='small',
-                           bbox=dict(boxstyle='Square', fc='white', ec='k'))
-        axes[1,0].set_xlabel(self.labels['t_fs'], labelpad=0)
-        axes[1,1].set_xlabel(self.labels['t_fs'], labelpad=0)
-        axes[1,0].plot(plot_t, np.sum(self.dynamics['ph_dic']['vals'], axis=1))
-        #axes[1,0].plot(plot_t, np.sum(self.dynamics['n'], axis=1))
-        #print(np.allclose(np.sum(self.dynamics['n'], axis=1), np.sum(self.dynamics['ph_dic']['vals'], axis=1)))
-        nPh, nM = self.dynamics['ph_dic']['vals'], self.dynamics['mol_dic']['vals'] 
-        nB, nD = self.dynamics['nB'], self.dynamics['nD']
-        nPh_tots = np.sum(nPh, axis=-1)
-        nM_tots = np.sum(nM, axis=-1)
-        nB_tots = np.sum(nB, axis=-1)
-        nD_tots = np.sum(nD, axis=-1)
-        offset=True
-        nB_str = r'\(n_{{\mathcal{{B}}}}(0) \sim {:.0g}\)'.format(nB_tots[0])
-        nD_str = r'\(n_{{\mathcal{{D}}}}(0) \sim {:.0f}\)'.format(nD_tots[0])
-        if offset:
-            nPh_plt = nPh_tots - nPh_tots[0]
-            nM_plt = nM_tots - nM_tots[0]
-            nB_plt = nB_tots - nB_tots[0]
-            nD_plt = nD_tots - nD_tots[0]
-        else:
-            nPh_plt = nPh_tots
-            nM_plt = nM_tots
-            nB_plt = nB_tots
-            nD_plt = nD_tots
-        axes[1,1].plot(nPh_plt, label=self.labels['Dph'])
-        axes[1,1].plot(nM_plt, label=self.labels['DnM'], ls='-')
-        axes[1,1].plot(nB_plt, label=self.labels['DnB'], ls='--')
-        axes[1,1].plot(nD_plt, label=self.labels['DnD'])
-        axes[1,1].plot(nPh_plt+nM_plt, label=self.labels['ph0nM0'], c='k')
-        #axes[1,1].plot(nPh_tots+nM_tots, label=self.labels['ph0nM0'], c='k',ls='--')
-        axes[1,1].set_title(self.labels['D'])
-        axes[1,1].legend(loc='upper left')
-        axes[1,1].annotate(nB_str + '\n' + nD_str,
-                           xy=(.665,.825),
-                           xycoords='axes fraction',
-                           xytext=(0,0),
-                           textcoords='offset points',
-                           size='small',
-                           bbox=dict(boxstyle='Square', fc='white', ec='k'))
-        # PANEL E and F + I - DENSITIES
-        #plot_x, plot_t, ph_dic, mol_dic = self.plot_densities(t, y, data_only=True)
-        plot_x = self.rs
-        thres = -1e-3
-        mol_vals_masked = np.ma.masked_less(nM_tots, thres)
-        mol_title_2 = self.labels['mol_rn0'] + r'\geq{:.0e}\)'.format(thres)
-        axes[2,0].set_ylabel(self.labels['t'], rotation=0, labelpad=20)
-        axes[2,0].set_xlabel(self.labels['rn'])
-        axes[2,1].set_xlabel(self.labels['rn'])
-        axes[4,0].set_xlabel(self.labels['rn'])
-        axes[2,0].set_title(self.labels['ph_rn'])
-        axes[2,1].set_title(self.labels['mol_rn0'])
-        axes[4,0].set_title(self.labels['nB0'])
-        extent = [plot_x[0], self.params['L'], plot_t[0], plot_t[-1]]
-        cm = colormaps['coolwarm'] 
-        my_im = lambda axis, vals: axis.imshow(vals, origin='lower', aspect='auto',
-                                           interpolation='none', extent=extent, cmap=cm)
-        im0 = my_im(axes[2,0], nPh)
-        im1 = my_im(axes[2,1], nM-nM[0])
-        nB_centered = nB - self.dynamics['nB'][0] # subtract t=0 row from each t>0 row
-        im2 = my_im(axes[4,0], nB_centered)
-        cbar0 = fig.colorbar(im0, ax=axes[2,0], aspect=20)
-        cbar1 = fig.colorbar(im1, ax=axes[2,1], aspect=20)
-        cbar2 = fig.colorbar(im2, ax=axes[4,0], aspect=20)
-        axes[2,0].axvline(L/2, c='k')
-        axes[2,1].axvline(L/2, c='k')
-        axes[4,0].axvline(L/2, c='k')
-        # PANEL G & H + I - MSD
-        mol_dic, ph_dic, coh_dic = self.dynamics['mol_dic'], self.dynamics['ph_dic'], self.dynamics['coh_dic']
-        avgP, errorP, msdP = ph_dic['mean'], np.sqrt(ph_dic['var']), ph_dic['msd']
-        avgM, errorM, msdM = mol_dic['mean'], np.sqrt(mol_dic['var']), mol_dic['msd']
-        avgC, errorC, msdC = coh_dic['mean'], np.sqrt(coh_dic['var']), coh_dic['msd']
-        #valid_i = next((i for i in range(len(msdP)) if not np.isnan(msdP[i])), None)
-        #valid_iC = next((i for i in range(len(msdC)) if not np.isnan(msdC[i])), None)
-        valid_i = 1 # ignore first datum
-        valid_iC = 1
-        plot_tP = plot_t[valid_i:]
-        msdP = msdP[valid_i:]
-        msdC = msdC[valid_iC:]
-        plot_tC = plot_t[valid_iC:]
-        axes[3,0].plot(plot_tP, np.sqrt(msdP))
-        axes[3,0].set_title(self.labels['ph_rms'])
-        axes[3,0].set_xlabel(self.labels['t_fs'])
-        axes[4,1].set_xlabel(self.labels['t_fs'])
-        fs = 1/(plot_t[1]-plot_t[0])
-        cutoffFS = self.params['lowpass'] * fs
-        logger.info('Lowpass at {} * {:.2g} = {:.2g} fs^-1'.format(self.params['lowpass'], fs, cutoffFS))
-        msdP = self.butter_lowpass_filter(msdP, cutoffFS, fs)
-        msdC = self.butter_lowpass_filter(msdC, cutoffFS, fs)
-        to_plot = np.sqrt(msdP)
-        to_plotC = np.sqrt(msdC)
-        axes[2,0].plot(self.params['L']/2-to_plot, plot_tC, c=self.COLORS[1])
-        def f(t, D, po):
-            return D * t**po + to_plot[0]
-        early_t = 50
-        early_i = next((j for j, t in enumerate(plot_tP) if t > early_t / self.EV_TO_FS), None)
-        axes[3,0].plot(plot_tP, to_plot, 
-                label=r'\rm{{Lowpass (}}\({:.1g} \text{{\rm{{fs}}}}^{{-1}}\)\rm{{)}}'.format(cutoffFS))
-        if len(plot_tP) > 10: # need reasonable number of points
-            popt, pcov = curve_fit(f, plot_tP[:early_i], to_plot[:early_i], bounds=([0,1],[np.inf, np.inf]))
-            fit_data = f(plot_tP, *popt)
-            axes[3,0].plot(plot_tP, fit_data,
-                           ls='--',
-                           label=r'\(D t^{{\alpha}}\), \(D={:.2g}\), \(\alpha={:.2g}\)'.format(*popt) +\
-                                   '\n' +\
-                                   r'\rm{{fit to (0,{})}}'.format(early_t)
-                           )
-            if fit_data[-1] > 1.5 * to_plot[-1]:
-                axes[3,0].set_ylim([None, 1.5 * to_plot[-1]])
-        else:
-            logger.warning('Too few data points to generate fit')
-        axes[3,0].legend()
-        # VELOCITY FIT PANEL
-        self.velocity_plot(ax=axes[3,1], rmsd=True)
-        self.velocity_wavefront_plot(ax=axes[4,1], ph_ax=axes[2,0], mol_ax=axes[2,1], msd_ax=axes[3,0])
-        fp = os.path.join(self.DEFAULT_DIRS['figures'],
-                          f'Nnu{self.Nnu}Nk{self.Nk}S{self.params["S"]}Gamz{self.params["dephase"]}.png')
-        #fig.savefig(fp, bbox_inches='tight')
-        fp2 = os.path.join(self.DEFAULT_DIRS['figures'], 'last.png')
-        fig.savefig(fp2, bbox_inches='tight')
-        logger.info(f'Combined plot saved to {fp2}')
+        ax.get_xaxis().set_visible(False)
+        ax.get_yaxis().set_visible(False)
+        ax.text(0.5, 0.975, '\n'.join(size_params),
+                ha='center', va='top', transform=ax.transAxes, size='medium') # axis coords
+        ax.text(0.25, 0.8, '\n'.join(sys_params),
+                ha='center', va='top', transform=ax.transAxes, size='medium')
+        ax.text(0.75, 0.8, '\n'.join(rate_params),
+                ha='center', va='top', transform=ax.transAxes, size='medium')
+        ax.text(0.25, 0.5, '\n'.join(bath_params),
+                ha='center', va='top', transform=ax.transAxes, size='medium')
 
-    def velocity_wavefront_plot(self, ax=None, ph_ax=None, mol_ax=None, msd_ax=None):
-        P_CUT_PER = 4
-        P_CUT = round(P_CUT_PER/100, 6)
-        if ax is None:
-            fig, ax = plt.subplots(figsize=(6,4))
-            savefig = True
-        else:
-            savefig = False
-        dph = self.dynamics['ph_dic']['vals'][1:]
-        dmol = self.dynamics['mol_dic']['vals'][1:]
-        ts = self.dynamics['t_fs'][1:]
-        xphs = []
-        xmols = []
-        dr = self.params['delta_r']
-        for i, t in enumerate(ts):
-            ph_vals = dph[i]
-            cph_vals = np.cumsum(ph_vals)
-            cph_vals /= cph_vals[-1] # normalise by total
-            pi_ph = next((j for j, p in enumerate(cph_vals) if p >= P_CUT))
-            xphs.append(dr * pi_ph)
-            mol_vals = dmol[i]
-            cmol_vals = np.cumsum(mol_vals)
-            cmol_vals /= cmol_vals[-1] # normalise by total
-            pi_mol = next((j for j, p in enumerate(cmol_vals) if p >= P_CUT))
-            xmols.append(dr * pi_mol)
-        dt = ts[1]-ts[0]
-        #cutoffFS = 0.01 * self.params['lowpass'] * (1/dt)
-        cutoffFS = 0.1*self.params['lowpass'] * (1/dt)
-        xphs_filt = self.butter_lowpass_filter(xphs, cutoffFS, dt)
-        xmols_filt = self.butter_lowpass_filter(xmols, cutoffFS, dt)
-        if ph_ax is not None:
-            #ph_ax.plot(xphs, ts, c='lime')
-            #ph_ax.plot(xphs_filt, ts, c='lime')
-            ph_ax.plot(xphs_filt, ts, c=self.COLORS[3])
-        if mol_ax is not None:
-            mol_ax.plot(xmols, ts, c='lime')      
-        if msd_ax is not None:
-            msd_line = msd_ax.lines[0]
-            first_val = msd_line.get_ydata()[0]
-            ph_centered = np.array(xphs_filt) - self.params['L']
-            abs_ph_centered = np.abs(ph_centered)
-            abs_ph_centered -= abs_ph_centered[0]
-            abs_ph_centered += first_val
-            msd_ax.plot(ts, abs_ph_centered, label=r'\rm{Wavefront (offset)}')
-            msd_ax.legend()
-        dxphs = np.diff(xphs_filt)
-        dxmols = np.diff(xmols_filt)
-        cfac = 1e-6 * 1e15 / constants.c # express as fraction of c
-        vphs = np.abs(dxphs/dt)
-        vmols = np.abs(dxmols/dt)
-        logger.info('Max | mean Ph wavefront velocity {:.1g} | {:.1g} mu.m/fs'.format(np.max(vphs), np.mean(vphs)))
-        vphs *= cfac
-        vmols *= cfac
-        ax.set_ylabel(r'\(v/c\)', rotation=0, labelpad=10)
-        ax.set_xlabel(r'\(t\) \rm{(fs)}')
-        ax.set_title(r'\rm{{Wavefront speed (}}\(P_{{\text{{\rm{{cut}}}}}}={}\)\rm{{\%)}}'.format(P_CUT_PER))
-        ax.plot(ts[1:], vphs, label=r'\(n_{\text{ph}}\)')
-        ax.plot(ts[1:], vmols, label=r'\(n_{\text{M}}\)')
-        ax.legend()
-        if savefig:
-            fig.savefig('figures/velocity_wavefront.png', bbox_inches='tight')
-            plt.close(fig)
-
-
-    def velocity_plot(self, ax=None, adak_cutoff=0.1, rmsd=False, dominant_rmsd=True):
-        if ax is None:
-            fig, ax = plt.subplots(figsize=(6,4))
-            savefig = True
-        else:
-            savefig = False
-        Ks = self.Ks[self.Q0:] # non-negative Ks only
-        cgs = self.cg(Ks)
-        ax.set_ylabel(r'\(v/c\)', rotation=0, labelpad=10)
-        ax.set_xlabel(r'\(K\)')
-        #ax.set_title(r'\(c_g(K)\) vs. velocity fit')
-        #ax.set_title(r'Photon velocities') # Velocities fit to MSD
-        # get dominant wavector
-        chosen_time_fs = 50
-        msd_str = r'\(\sqrt{\text{MSD}[n_{\text{ph}}]}\)' if rmsd else r'\(\text{MSD}[n_{\text{ph}}]\)'
-        ax.set_title(r'\rm{{Velocities at}} \(t={}\)\rm{{fs from}} {}'.format(chosen_time_fs, msd_str))
-        chosen_time = chosen_time_fs / self.EV_TO_FS
-        chosen_i = next((i for i, t in enumerate(self.dynamics['select_data']['select_t']) if t >= chosen_time_fs), None)
-        cgs_c = cgs/constants.c
-        if chosen_i is None:
-            logger.warning(f'<a^dag_K\' a_K> not recorded at {chosen_time_fs} fs')
-            dominant_i = 0
-        else:
-            ada = self.dynamics['select_data']['adak'][chosen_i]
-            ys = fftshift(np.real(np.diag(ada)))
-            ys = ys[self.Q0:]
-            rmsd = np.sqrt(np.average(Ks**2, weights=ys))
-            dominant_i = int(rmsd)
-            ys *= np.max(cgs_c)/np.max(ys)
-            ys = self.butter_lowpass_filter(ys, adak_cutoff, 1)
-            order = 8
-            if not dominant_rmsd:
-                dominant_i = None
-                while order > 0:
-                    i_maxes = argrelextrema(ys, np.greater, order=order)[-1]
-                    if len(i_maxes) > 0:
-                        dominant_i = i_maxes[-1]
-                        break
-                    order -= 1
-                if dominant_i is None:
-                    dominant_i = np.argmax(ys)
-            ax.plot(Ks, ys, alpha=0.6,
-                    label=r'\(\langle a^\dagger_K a_K\rangle\) \rm{(filtered)}'
-                    #label=r'\(\langle a^\dagger_K a_K\rangle\) '\
-                    #        r'\rm{{(}}\(t={}\)\rm{{fs)}}'.format(chosen_time_fs)
-                    )
-            ax.axvline(dominant_i, alpha=0.6, c='m')
-        ax.plot(Ks, cgs_c, label=r'\(c_g\)')
-        # make three fits
-        #fit_times = [50, 75, 100]
-        fit_times = [50]
-        msdP = self.dynamics['ph_dic']['msd'][1:] # ignore first data point where no photons
-        ts_fs = self.dynamics['t_fs'][1:]
-        fs = 1/(ts_fs[1]-ts_fs[0])
-        cutoffFS = self.params['lowpass'] * fs
-        msdP = self.butter_lowpass_filter(msdP, cutoffFS, fs)
-        if rmsd:
-            msdP = np.sqrt(msdP)
-        markers = ['o', '^', 's', '*', 'P', 'D']
-        def f(t, D, po):
-            return D * t**po + msdP[0]
-        for mi, fit_t in enumerate(fit_times):
-            ei = next((i for i, t in enumerate(ts_fs) if t >= fit_t), -1)
-            # fit made in fs
-            popt, pcov = curve_fit(f, ts_fs[:ei], msdP[:ei], bounds=([0,1],[np.inf, np.inf]))
-            perr = np.sqrt(np.diag(pcov))
-            v = self.velocity(chosen_time_fs, popt[0], popt[1]) # this is in micro meters per fs
-            # (micro meters because of how moments were calculated - see plot_densities)
-            v *= 1e-6 * 1e15 # convert to ms^-1
-            v /= constants.c # then divide by c to get as ratio of soeed f light
-            logger.debug('Fit to (0,{}): D, alpha [err] {:.2g}, {:.2g} [{:.1g}, {:.1g}],'\
-                    'v/c = {:.2g}'.format(fit_t, *popt, *perr, v))
-            ax.scatter(dominant_i, v, marker=markers[mi%len(markers)], 
-                       label=r'\rm{{fit to }}\((0,{})\)'.format(fit_t))
-        # plot with different markers
-        ax.legend()
-        if savefig:
-            fig.savefig('figures/velocity.png', bbox_inches='tight')
-            plt.close(fig)
-
-    @classmethod
-    def butter_lowpass_filter(cls, data, cutoff, fs, order=5, axis=-1):
-        data = np.array(data)
-        b, a = butter(order, cutoff, fs=fs, btype='low')
-        padlen = 3 * max(len(a), len(b)) # default filtfilt padlength
-        if padlen >= data.shape[-1] - 1:#but must be less than data.shape[-1]-1
-            # https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.filtfilt.html#scipy.signal.filtfilt
-            padlen = max(0, data.shape[-1]-2) 
-        return filtfilt(b, a, data, axis=axis, padlen=padlen)
-
-
-    def plot_pump_profile(self, data_only=False):
-        sigma = self.params['sigma_0'] # fraction of L (i.e. Nk) 
-        all_ns = np.linspace(0, self.Nk, num=300)
-        scaled_sigma = sigma * self.Nk
-        mid_index = self.Nk//2
-        if sigma == 0:
-            all_pex = self.params['pex'] * np.ones(len(all_ns))
-            select_pex = self.params['pex'] * np.ones(self.Nk)
-        else:
-            all_pex = self.params['pex'] * np.exp(- (all_ns-mid_index)**2/(2*scaled_sigma**2))
-            select_pex = self.params['pex'] * np.exp(-(self.ns-mid_index)**2/(2*scaled_sigma**2))
-        if data_only:
-            return all_ns, all_pex, self.ns, select_pex
-        fig, ax = plt.subplots(figsize=(6,4))
-        ax.set_xlabel(r'\(n\)')
-        ax.set_ylabel(r'\(p^\uparrow\)', rotation=0, labelpad=15)
-        ax.plot(all_ns, all_pex)
-        ax.scatter(self.ns, select_pex, c='r', marker='.')
-        ax.set_title(r'\(\sigma_0={}\) \(N_k={}\)'.format(sigma, self.Nk), y=1.02)
-        fp = os.path.join(self.DEFAULT_DIRS['figures'], 'initial_profile.png')
-        fig.savefig(fp, bbox_inches='tight')
-        logger.info(f'Initial molecular excitation plot saved to {fp}.')
-        return all_ns, all_pex, self.ns, select_pex
-
-    def plot_dispersion(self, data_only=False):
-        fig, ax = plt.subplots(figsize=(6,4))
-        ax.set_xlabel(r'\(K\)', x=0.47)
-        ax.set_ylabel(r'\hspace*{-.3cm}\(\hbar\omega\)\\[2pt]\rm{(eV)}', rotation=0, labelpad=23)
-        all_Ks = np.linspace(-2*np.abs(self.Ks[0]), 2*np.abs(self.Ks[-1])+1, 250)
+    def plot_dispersion_and_pump(self):
+        fig, axes = plt.subplots(1,2, figsize=(8,4), constrained_layout=True)
+        fig.suptitle(f'Emitter positions / discrete modes shown in red ($N_k={self.Nk}$)')
+        axes[0].set_xlabel(r'$k$ \rm{(}$\mu$\rm{m}${}^{-1}$\rm{)}')
+        axes[0].set_title(r'$\hbar\omega$ \rm{(eV)}')
+        axes[1].set_xlabel(self.labels['rn'])
+        axes[1].set_title(r'$\Gamma_\uparrow(r_n)\ (\sigma={}$\rm{{nm}}$)$'.format(
+            self.params['pump_width']))
+        all_Ks = np.linspace(self.Ks[0],self.Ks[-1], 250)
+        all_ks = (2*np.pi/self.params['L']) * all_Ks * 1e3
         all_y = self.omega(all_Ks)
         chosen_y = self.omega(self.Ks)
-        if data_only:
-            return all_Ks, all_y, self.Ks, chosen_y
-        ax.plot(all_Ks, all_y)
-        ax.scatter(self.Ks, chosen_y, c='r', s=10, zorder=2)
-        fp = os.path.join(self.DEFAULT_DIRS['figures'], 'omega.png')
-        fig.savefig(fp, bbox_inches='tight')
-        logger.info(f'Dispersion plot saved to {fp}.')
+        all_ns = np.linspace(0, self.Nk, 250)
+        all_rs = self.params['delta_r'] * all_ns * 1e-03
+        all_pumps = self.pump(all_ns)
+        select_pumps = self.pump(self.ns)
+        axes[0].plot(all_ks, all_y)
+        axes[0].scatter(self.ks * 1e3, chosen_y, c='r', s=8, zorder=2)
+        axes[1].plot(all_rs, all_pumps)
+        axes[1].scatter(self.rs, select_pumps, c='r', s=8, zorder=2)
+        fp = os.path.join(self.DEFAULT_DIRS['figures'], 'dispersion_pump.png')
+        fig.savefig(fp, bbox_inches='tight', dpi=350)
+        logger.info(f'Dispersion and pump profile saved to {fp}.')
         plt.close(fig)
-        return all_Ks, all_y, self.Ks, chosen_y
+
 
 if __name__ == '__main__':
     logging.basicConfig(
         format='%(filename)s L%(lineno)s %(asctime)s %(levelname)s: %(message)s',
         level=logging.INFO,
         datefmt='%H:%M')
-    htc = HTC()
-    htc.plot_dispersion()
-    htc.evolve()
-    plt.close('all') # cleanup any open figures
-    #htc.export_data() # export dynamics and parameters as dict to .pkl file
+    parameters = {
+            'Q0': 61, # N_k = 2*Q0+1 nanoparticles (123)
+            'NE': 4, # Number of emitters per gap
+            'w': 1, # Gap width, nm (Emitter spacing Delta_r = 2a+w = 81nm)
+            'a': 40, # Nanoparticle radius, nm (Chain length L = N_k * Delta_r = 10.0 nm)
+            'omega_p': 1.88, # Plasmon resonance, eV
+            'omega_0': 1.86, # Dye resonance, eV
+            'g': 0.095, # Individual light-matter coupling, eV (collective gSqrt(NE))
+            'kappa': 1e-01, # photon loss
+            'dephase': 0.0, # Emitter pure dephasing
+            'pump_strength': 1e-01, # Emitter pump magnitude
+            'pump_width': 500, # Emitter pump spot width, nm (approx. 6 nanoparticles)
+            'decay': 1e-01, # Emitter non-resonant decay
+            'Nnu': 2, # Number of vibrational levels for each emitter
+            'S': 0.01, # Huang-Rhys parameter
+            'omega_nu': 0.19, # Vibrational mode resonance, eV
+            'T':0.026, # k_B T in eV (.026=302K)
+            'gam_nu': 1e-03, # vibrational damping rate
+            'dt': 0.5, # interval at which solution is sampled. Does not affect accuracy of solution 
+            }
+    htc = HTC(parameters)
+    htc.plot_dispersion_and_pump()
+    results = htc.evolve(tend=100)
+    htc.plot_dynamics()
+    htc.plot_final_state()
+    #
+    # If want to analyse data separately use... 
+    #results['dynamics']['t'] # times
+    #results['dynamics']['r'] # ensemble positions (of NE emitters)
+    #results['dynamics']['nP'] # Photonic excitation n_ph(t,r_n) (time 1st index, position 2nd)
+    #results['dynamics']['nM'] # Emitter excitation n_M(t,r_n) 
+    #results['dynamics']['nB'] # Bright state excitation n_B(t,r_n) 
+    #results['dynamics']['g1'] # Normalised first-order coherence g^(1)(t,r_n,L/2)
+    #results['dynamics']['vpop'] # Populations of vibrational level at each time (1st index), for each position (2nd index), for each level 0..Nnu-1 (3rd index)
 
