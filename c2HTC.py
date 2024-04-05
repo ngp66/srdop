@@ -514,7 +514,9 @@ class HTC:
         nPs = np.zeros((Nt, self.Nk), dtype=float)
         nMs = np.zeros((Nt, self.Nk), dtype=float)
         nBs = np.zeros((Nt, self.Nk), dtype=float)
-        g1s = np.zeros((Nt, self.Nk), dtype=complex) # real also??
+        g1s = np.zeros((Nt, self.Nk), dtype=complex)
+        #g1s = np.zeros((Nt, self.Nk, self.Nk), dtype=complex)
+        Vs = np.zeros((Nt, self.Q0+1), dtype=float)
         vpops = np.zeros((Nt, self.Nk, self.Nnu), dtype=float)
         self.dynamics = {'t': self.t_fs,
                          'r': self.rs, 
@@ -522,6 +524,7 @@ class HTC:
                          'nM': nMs,
                          'nB': nBs,
                          'g1': g1s,
+                         'V': Vs, 
                          'vpop': vpops,
                          }
 
@@ -556,34 +559,41 @@ class HTC:
         dft2 = fft(alpha, axis=-1)
         nph = np.diag(dft2) # n(r_n) when n=m
         self.check_real(t_index, nph, 'Photon density')
-        dft2 = fftshift(dft2)
-        g1s = np.zeros(self.Nk, dtype=complex)
+        # Previous code - calculated g^(1)(r_n, R)
+        #dft2 = fftshift(dft2)
         mid_n = self.Q0
+        g1 = np.zeros(self.Nk, dtype=complex)
         for n in self.ns:
             numer = dft2[n, mid_n]
             demon = np.sqrt(np.abs(np.real(dft2[n,n]) * np.real(dft2[mid_n, mid_n])))
             if np.isclose(demon, 0.0, atol=1e-8):
                 #print('Nearly zero! t_index', t_index, '   n=', n)
-                g1s[n] = np.zeros_like(numer)
+                g1[n] = np.zeros_like(numer)
             else:
-                g1s[n] = numer/demon
-        #if t_index==790:
-        #    # Snapshot in k-space, for debugging
-        #    fig, axes = plt.subplots(2,2, figsize=(8,8), constrained_layout=True)
-        #    extent = [self.Ks[0], self.Ks[-1], self.Ks[0], self.Ks[-1]]
-        #    cm = colormaps['coolwarm'] 
-        #    my_im = lambda axis, vals: axis.imshow(vals, origin='lower', aspect='auto',
-        #                                   interpolation='none', extent=extent, cmap=cm)
-        #    im0 = my_im(axes[0,0], np.real(fftshift(ada)))
-        #    im1 = my_im(axes[0,1], np.imag(fftshift(ada)))
-        #    cbar0 = fig.colorbar(im0, ax=axes[0,0], aspect=20)
-        #    cbar1 = fig.colorbar(im1, ax=axes[0,1], aspect=20)
-        #    axes[1,0].plot(self.Ks, np.real(nph))
-        #    fig.savefig('figures/photonic.png', dpi=350, bbox_inches='tight')
-        # check |g|<=1 etc.
+                g1[n] = numer/demon
+        # 2024-04-05 - calculate g^(1)(r,r')
+        #g1 = np.zeros((self.Nk, self.Nk), dtype=complex)
+        #for n1 in self.ns:
+        #    for n2 in self.ns:
+        #        numer = dft2[n1, n2]
+        #        denom = np.sqrt(np.abs(np.real(dft2[n1,n1]) * np.real(dft2[n2, n2])))
+        #        if np.isclose(denom, 0.0, atol=1e-8):
+        #            g1[n1,n2] = np.zeros_like(numer)
+        #        else:
+        #            g1[n1,n2] = numer/denom
+        # Visibility
+        V = np.zeros(self.Q0+1, dtype=float)
+        for n in range(self.Q0+1):
+            numerV = 2 * np.abs(dft2[self.Q0+n, self.Q0-n])
+            denomV = np.real(dft2[self.Q0+n,self.Q0+n]) +  np.real(dft2[self.Q0-n,self.Q0-n]) 
+            if np.isclose(denomV, 0.0, atol=1e-8):
+                V[n] = 0.0
+            else:
+                V[n] = numerV/denomV
         #self.check_real(t_index, g1s, 'First-order coherence')
         self.dynamics['nP'][t_index] = np.real(nph)
-        self.dynamics['g1'][t_index] = g1s
+        self.dynamics['g1'][t_index] = g1
+        self.dynamics['V'][t_index] = V
 
     def calculate_electronic(self, t_index, l, ll):
         # N.B. we do not need to use the coefficients of the initial density
@@ -749,8 +759,8 @@ class HTC:
         ax2 = fig.add_subplot(gs[0, 1])
         ax3 = fig.add_subplot(gs[1, :])
         fig.suptitle(r'Final $t={}$ fs'.format(self.dynamics['t'][-1]))
-        ax1.plot(self.rs, self.dynamics['nP'][-1], label=self.labels['Eph'])
-        ax1.plot(self.rs, self.dynamics['nM'][-1], label=self.labels['EnM'])
+        ax1.plot(self.rs, self.dynamics['nP'][-1]/np.max(self.dynamics['nP'][-1]), label=self.labels['Eph'])
+        ax1.plot(self.rs, self.dynamics['nM'][-1]/np.max(self.dynamics['nM'][-1]), label=self.labels['EnM'])
         ax1.set_xlabel(self.labels['rn'])
         ax1.legend()
         final_vpops = self.dynamics['vpop'][-1]
@@ -760,6 +770,7 @@ class HTC:
         ax2.set_xlabel(self.labels['rn'])
         ax2.set_title(r'Vibrational populations')
         ax3.plot(self.rs, np.abs(self.dynamics['g1'][-1]), label=r'$\lvert g^{(1)}(r_n) \rvert$')
+        #ax3.plot(self.rs[:self.Q0+1], self.dynamics['V'][-1], label=r'$V(R)$')
         #ax3.set_title(r'$\lvert g^{(1)}(r_n) \rvert$')
         all_ns = np.linspace(0, self.Nk, 250)
         all_rs = self.params['delta_r'] * all_ns * 1e-03
