@@ -752,15 +752,20 @@ class HTC:
                 'E': r'\(n_X(t) = \sum_{n} n_X(t, r_n)\)',
                 }
 
-    def plot_final_state(self):
+    def plot_final_state(self, normalise=False):
         fig = plt.figure(figsize=(8,8), constrained_layout=True)
         gs = fig.add_gridspec(2,2)
         ax1 = fig.add_subplot(gs[0, 0])
         ax2 = fig.add_subplot(gs[0, 1])
         ax3 = fig.add_subplot(gs[1, :])
         fig.suptitle(r'Final $t={}$ fs'.format(self.dynamics['t'][-1]))
-        ax1.plot(self.rs, self.dynamics['nP'][-1]/np.max(self.dynamics['nP'][-1]), label=self.labels['Eph'])
-        ax1.plot(self.rs, self.dynamics['nM'][-1]/np.max(self.dynamics['nM'][-1]), label=self.labels['EnM'])
+        nP = self.dynamics['nP'][-1]
+        nM = self.dynamics['nM'][-1]
+        if normalise:
+            nP /= np.max(nP)
+            nM /= np.max(nM)
+        ax1.plot(self.rs, nP, label=self.labels['Eph'])
+        ax1.plot(self.rs, nM, label=self.labels['EnM'])
         ax1.set_xlabel(self.labels['rn'])
         ax1.legend()
         final_vpops = self.dynamics['vpop'][-1]
@@ -928,7 +933,7 @@ if __name__ == '__main__':
     htc.plot_dispersion_and_pump()
     results = htc.evolve(tend=100)
     htc.plot_dynamics()
-    htc.plot_final_state()
+    htc.plot_final_state(normalise=False)
     #
     # If want to analyse data separately use... 
     #results['dynamics']['t'] # times
