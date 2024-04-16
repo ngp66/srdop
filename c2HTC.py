@@ -903,6 +903,51 @@ class HTC:
         logger.info(f'Dispersion and pump profile saved to {fp}.')
         plt.close(fig)
 
+def plot_input_output(parameters, pump_strengths, tend=100):
+    # 2024-04-16
+    params = parameters
+    num_pumps = len(pump_strengths)
+    ratios = np.array(pump_strengths) / params['decay']
+    nph_final = np.zeros((num_pumps, 2*params['Q0']+1), dtype=float)
+    for i, pump in enumerate(pump_strengths):
+        logger.info(f'On pump {i+1} of {num_pumps}')
+        params['pump_strength'] = pump
+        htc = HTC(parameters)
+        results = htc.evolve(tend=100)
+        nph_final[i, :] = results['dynamics']['nP'][-1,:]
+    fig, axes = plt.subplots(1, 2, figsize=(8,4), constrained_layout=True)
+    nph_tots = np.sum(nph_final, axis=1) # Sum over all lattice positions 
+    axes[0].set_xlabel(r'$\Gamma_\uparrow(L/2)/\Gamma_\downarrow$')
+    axes[1].set_xlabel(htc.labels['rn'])
+    axes[0].set_title(r'$\sum_n n_{{\text{{ph}}}}(t={}, r_n)$'.format(tend))
+    axes[0].plot(ratios, nph_tots)
+    axes[0].set_xscale('log') # Log x-axis
+    axes[0].set_yscale('log') # Log y-axis
+    num_cross_sections = min(5, num_pumps)  # maximum number of cross-sections
+    select_indices = np.round(np.linspace(0, num_pumps-1, num_cross_sections)).astype(int)
+    for i in select_indices:
+        axes[1].plot(htc.rs, nph_final[i, :], label=r'${}$'.format(round(ratios[i],5)))
+    axes[1].set_yscale('log') # Log y-axis
+    axes[1].set_title(r'$n_{{\text{{ph}}}}(t={}, r_n)$'.format(tend))
+    axes[1].legend(title=r'$\Gamma_\uparrow(L/2)/\Gamma_\downarrow$')
+    fp = os.path.join(htc.DEFAULT_DIRS['figures'], 'input_output.png')
+    fig.savefig(fp, bbox_inches='tight')
+
+def plot_dynamics_and_final_state(parameters):
+    # 2024-04-05 - Dynamics and steady state
+    htc = HTC(parameters)
+    htc.plot_dispersion_and_pump()
+    results = htc.evolve(tend=100)
+    htc.plot_dynamics()
+    htc.plot_final_state(normalise=False)
+    # If want to analyse data separately use... 
+    #results['dynamics']['t'] # times
+    #results['dynamics']['r'] # ensemble positions (of NE emitters)
+    #results['dynamics']['nP'] # Photonic excitation n_ph(t,r_n) (time 1st index, position 2nd)
+    #results['dynamics']['nM'] # Emitter excitation n_M(t,r_n) 
+    #results['dynamics']['nB'] # Bright state excitation n_B(t,r_n) 
+    #results['dynamics']['g1'] # Normalised first-order coherence g^(1)(t,r_n,L/2)
+    #results['dynamics']['vpop'] # Populations of vibrational level at each time (1st index), for each position (2nd index), for each level 0..Nnu-1 (3rd index)
 
 if __name__ == '__main__':
     logging.basicConfig(
@@ -929,18 +974,7 @@ if __name__ == '__main__':
             'gam_nu': 1e-03, # vibrational damping rate
             'dt': 0.5, # interval at which solution is sampled. Does not affect accuracy of solution 
             }
-    htc = HTC(parameters)
-    htc.plot_dispersion_and_pump()
-    results = htc.evolve(tend=100)
-    htc.plot_dynamics()
-    htc.plot_final_state(normalise=False)
-    #
-    # If want to analyse data separately use... 
-    #results['dynamics']['t'] # times
-    #results['dynamics']['r'] # ensemble positions (of NE emitters)
-    #results['dynamics']['nP'] # Photonic excitation n_ph(t,r_n) (time 1st index, position 2nd)
-    #results['dynamics']['nM'] # Emitter excitation n_M(t,r_n) 
-    #results['dynamics']['nB'] # Bright state excitation n_B(t,r_n) 
-    #results['dynamics']['g1'] # Normalised first-order coherence g^(1)(t,r_n,L/2)
-    #results['dynamics']['vpop'] # Populations of vibrational level at each time (1st index), for each position (2nd index), for each level 0..Nnu-1 (3rd index)
+    pump_strengths = np.logspace(-3, 0, num=2) # set pump strength magnitudes for input-output curve
+    plot_input_output(parameters, pump_strengths, tend=100) # all other parameters fixed
+    #plot_dynamics_and_final_state(parameters) # previous code
 
