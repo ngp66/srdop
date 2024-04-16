@@ -21,4 +21,6 @@ Summary of notations for cumulant equations and coefficients used in the code
 
 Requirements
 ------------
-- numpy, scipy, opt_einsum, matplotlib, mpmath, pretty_traceback (optional)
+- python>=3.11
+- numpy, scipy, opt_einsum, matplotlib, mpmath, pretty_traceback (optional),
+  progressbar, sparse
