@@ -124,7 +124,7 @@ class HTC:
         self.NE, self.Nk, self.Nnu = params['NE'], params['Nk'], params['Nnu']
         params['Nm'] = self.NE * self.Nk # Total number of emitters
         self.Nm = params['Nm']
-        params['gSqrtNE'] = params['g'] * self.NE
+        params['gSqrtNE'] = params['g'] * np.sqrt(self.NE)
         self.off_diag_indices_Nk = np.where(~np.eye(self.Nk, dtype=bool))
         self.diag_indices_Nk = np.diag_indices(self.Nk)
 
