@@ -464,7 +464,7 @@ class HTC:
         next_t = self.t[t_index]
         while rk45.status == 'running':
             end = False # flag to break integration loop
-            rk45.step() # perform one step (necessary before call to dense_output())
+            step_message = rk45.step() # perform one step (necessary before call to dense_output())
             solver_t.append(rk45.t)
             if rk45.t >= next_t: # solver has gone past one (or more) of our grid points, so now evaluate soln
                 soln = rk45.dense_output() # interpolation function for the last timestep
@@ -495,7 +495,10 @@ class HTC:
                 break # safety, stop solver if we have already calculated state at self.t[-1]
         toc = time()
         self.compute_time = toc-tic # ptoc-ptic
+        if rk45.status == 'failed':
+            logger.warning(f'RK45 solver failed at t={rk45.t:.1f} with message "{step_message}"')
         self.solver_info = {'method': 'RK45', 't0': 0.0, 'tend': tend, 'atol': atol, 'rtol': rtol,
+                            'solver_tend': rk45.t, 'status': rk45.status, 
                             'runtime': self.compute_time}
         #logger.info('...done ({:.0f}s)'.format(self.compute_time))
         self.results = {'parameters': self.params,
@@ -512,6 +515,7 @@ class HTC:
         """
         Nt = self.num_t
         nPs = np.zeros((Nt, self.Nk), dtype=float)
+        nKs = np.zeros((Nt, self.Nk), dtype=float)
         nMs = np.zeros((Nt, self.Nk), dtype=float)
         nBs = np.zeros((Nt, self.Nk), dtype=float)
         g1s = np.zeros((Nt, self.Nk), dtype=complex)
@@ -521,6 +525,7 @@ class HTC:
         self.dynamics = {'t': self.t_fs,
                          'r': self.rs, 
                          'nP': nPs,
+                         'nK': nKs,
                          'nM': nMs,
                          'nB': nBs,
                          'g1': g1s,
@@ -555,6 +560,8 @@ class HTC:
         self.calculate_vibronic(t_index, l) # vibrational populations for emitters in each gap
 
     def calculate_photonic(self, t_index, ada):
+        nk = fftshift(np.diag(ada))
+        self.check_real(t_index, nk, 'Photon number (k-space)')
         alpha = ifft(ada, axis=0) # including 1/N_k normalisation!
         dft2 = fft(alpha, axis=-1)
         nph = np.diag(dft2) # n(r_n) when n=m
@@ -592,6 +599,7 @@ class HTC:
                 V[n] = numerV/denomV
         #self.check_real(t_index, g1s, 'First-order coherence')
         self.dynamics['nP'][t_index] = np.real(nph)
+        self.dynamics['nK'][t_index] = np.real(nk)
         self.dynamics['g1'][t_index] = g1
         self.dynamics['V'][t_index] = V
 
@@ -724,6 +732,7 @@ class HTC:
 
     def get_labels(self):
         return {'K': r'\(K\)',
+                'k': r'\(k\ \rm{\text{(}}\mu\text{\rm{m}}^{-1}\text{\rm{)}}\)',
                 't': r'\(t\)',
                 't_fs': r'\(t\) \rm{(fs)}',
                 #'rn': r'\(r_n\) \rm{(nm)}',
@@ -757,7 +766,9 @@ class HTC:
         gs = fig.add_gridspec(2,2)
         ax1 = fig.add_subplot(gs[0, 0])
         ax2 = fig.add_subplot(gs[0, 1])
-        ax3 = fig.add_subplot(gs[1, :])
+        #ax3 = fig.add_subplot(gs[1, :])
+        ax3 = fig.add_subplot(gs[1, 0])
+        ax4 = fig.add_subplot(gs[1, 1])
         fig.suptitle(r'Final $t={}$ fs'.format(self.dynamics['t'][-1]))
         nP = self.dynamics['nP'][-1]
         nM = self.dynamics['nM'][-1]
@@ -775,6 +786,7 @@ class HTC:
         ax2.set_xlabel(self.labels['rn'])
         ax2.set_title(r'Vibrational populations')
         ax3.plot(self.rs, np.abs(self.dynamics['g1'][-1]), label=r'$\lvert g^{(1)}(r_n) \rvert$')
+        ax4.plot(self.rs[self.Q0:], self.dynamics['V'][-1], label=r'$V(r_n)$')
         #ax3.plot(self.rs[:self.Q0+1], self.dynamics['V'][-1], label=r'$V(R)$')
         #ax3.set_title(r'$\lvert g^{(1)}(r_n) \rvert$')
         all_ns = np.linspace(0, self.Nk, 250)
@@ -782,8 +794,12 @@ class HTC:
         all_pumps = self.pump(all_ns)
         ax3.plot(all_rs, all_pumps/np.max(all_pumps), ls='--', c='k',
                  label=r'$\Gamma_\uparrow(r_n)/\Gamma_\uparrow(0)$')
+        ax4.plot(all_rs[len(all_rs)//2:], all_pumps[len(all_pumps)//2:]/np.max(all_pumps), ls='--', c='k',
+                 label=r'$\Gamma_\uparrow(r_n)/\Gamma_\uparrow(0)$')
         ax3.set_xlabel(self.labels['rn'])
+        ax4.set_xlabel(self.labels['rn'])
         ax3.legend()
+        ax4.legend()
         fp = os.path.join(self.DEFAULT_DIRS['figures'], 'final_state.png')
         fig.savefig(fp, bbox_inches='tight', dpi=350)
         logger.info(f'Final state plots saved to {fp}.')
@@ -909,27 +925,62 @@ def plot_input_output(parameters, pump_strengths, tend=100):
     num_pumps = len(pump_strengths)
     ratios = np.array(pump_strengths) / params['decay']
     nph_final = np.zeros((num_pumps, 2*params['Q0']+1), dtype=float)
+    nK_final = np.zeros((num_pumps, 2*params['Q0']+1), dtype=float)
+    nM_final = np.zeros((num_pumps, 2*params['Q0']+1), dtype=float)
+    nvpop_final = np.zeros((num_pumps, 2*params['Q0']+1), dtype=float)
     for i, pump in enumerate(pump_strengths):
         logger.info(f'On pump {i+1} of {num_pumps}')
         params['pump_strength'] = pump
         htc = HTC(parameters)
-        results = htc.evolve(tend=100)
-        nph_final[i, :] = results['dynamics']['nP'][-1,:]
-    fig, axes = plt.subplots(1, 2, figsize=(8,4), constrained_layout=True)
+        results = htc.evolve(tend=tend)
+        nph_final[i, :] = results['dynamics']['nP'][-1, :]
+        nK_final[i, :] = results['dynamics']['nK'][-1, :]
+        nM_final[i, :] = results['dynamics']['nM'][-1, :]
+        nvpop_final[i, :] = results['dynamics']['vpop'][-1, :, -1] # highest vibrational state
+    fig, axes = plt.subplots(3, 2, figsize=(8,12), constrained_layout=True)
     nph_tots = np.sum(nph_final, axis=1) # Sum over all lattice positions 
-    axes[0].set_xlabel(r'$\Gamma_\uparrow(L/2)/\Gamma_\downarrow$')
-    axes[1].set_xlabel(htc.labels['rn'])
-    axes[0].set_title(r'$\sum_n n_{{\text{{ph}}}}(t={}, r_n)$'.format(tend))
-    axes[0].plot(ratios, nph_tots)
-    axes[0].set_xscale('log') # Log x-axis
-    axes[0].set_yscale('log') # Log y-axis
+    nM_tots = np.sum(nM_final, axis=1) # sum over all lattice positions
+    axes[0,0].set_xlabel(r'$\Gamma_\uparrow(L/2)/\Gamma_\downarrow$')
+    axes[0,1].set_xlabel(r'$r_n (\mu \text{\rm{m}})$')
+    axes[0,0].set_title(r'$\sum_n n_{{\text{{ph}}}}(r_n)$')
+    #axes[0,0].set_title(r'$\sum_n n_{{\text{{ph}}}}(t={}, r_n)$'.format(tend))
+    axes[0,0].plot(ratios, nph_tots)
+    axes[0,0].set_xscale('log') # Log x-axis
+    axes[0,0].set_yscale('log') # Log y-axis
     num_cross_sections = min(5, num_pumps)  # maximum number of cross-sections
     select_indices = np.round(np.linspace(0, num_pumps-1, num_cross_sections)).astype(int)
     for i in select_indices:
-        axes[1].plot(htc.rs, nph_final[i, :], label=r'${}$'.format(round(ratios[i],5)))
-    axes[1].set_yscale('log') # Log y-axis
-    axes[1].set_title(r'$n_{{\text{{ph}}}}(t={}, r_n)$'.format(tend))
-    axes[1].legend(title=r'$\Gamma_\uparrow(L/2)/\Gamma_\downarrow$')
+        axes[0,1].plot(htc.rs, nph_final[i, :], label=r'${}$'.format(round(ratios[i],5)))
+    axes[0,1].set_yscale('log') # Log y-axis
+    axes[0,1].set_title(r'$n_{{\text{{ph}}}}(r_n)$'.format(tend))
+    #axes[0,1].set_title(r'$n_{{\text{{ph}}}}(t={}, r_n)$'.format(tend))
+    axes[0,1].legend(title=r'$\Gamma_\uparrow(L/2)/\Gamma_\downarrow$')
+    axes[1,0].set_xlabel(r'$\Gamma_\uparrow(L/2)/\Gamma_\downarrow$')
+    axes[1,1].set_xlabel(r'$r_n (\mu \text{\rm{m}})$')
+    fig.suptitle(r'\(t_{{\text{{\rm{{end}}}}}}={}\)'.format(tend) + r' \rm{(fs)}' + r' \(N_\nu={}\)'.format(params['Nnu']))
+    axes[1,0].set_title(r'\rm{average inversion}')
+    #axes[1,0].set_title(r'$(1/N_M)\sum_n (2n_{{\text{{M}}}}(t={}, r_n)/N_E-1) (av. inversion)$'.format(tend))
+    axes[1,1].set_title(r'\rm{emitter inversion}')
+    #axes[1,1].set_title(r'$2n_{{\text{{M}}}}(t={}, r_n)/N_E-1$ (emitter inversion)'.format(tend))
+    axes[1,0].set_xscale('log') # Log x-axis
+    #axes[1,0].set_yscale('log') # Log y-axis
+    #axes[1,1].set_yscale('log') # Log y-axis
+    axes[1,0].plot(ratios, (1/htc.Nk)*(2*nM_tots/htc.NE-1))
+    for i in select_indices:
+        plabel = r'${}$'.format(round(ratios[i],5))
+        axes[1,1].plot(htc.rs, 2*nM_final[i, :]/htc.NE-1, label=plabel)
+        axes[2,1].plot(htc.ks, nK_final[i, :], label=plabel)
+        axes[2,0].plot(htc.rs, nvpop_final[i, :], label=plabel)
+        #axes[2,1].plot(htc.ks, ifftshift(nK_final[i, :]), label=r'${}$'.format(round(ratios[i],5)), ls='--')
+    axes[1,1].legend(title=r'$\Gamma_\uparrow(L/2)/\Gamma_\downarrow$')
+    axes[2,1].legend(title=r'$\Gamma_\uparrow(L/2)/\Gamma_\downarrow$')
+    axes[2,1].set_xlabel(htc.labels['k'])
+    axes[2,1].set_title(r'$\langle a_k^\dagger a_k\rangle$')
+    axes[2,1].set_yscale('log') # Log y-axis
+    #axes[2,0].axis('off') # TURN OFF AXIS
+    axes[2,0].set_xlabel(r'$r_n (\mu \text{\rm{m}})$')
+    axes[2,0].set_title(r'\rm{vibrational pop level} ' + r'\(N_\nu-1={}\)'.format(htc.Nnu-1))
+    axes[2,0].legend()
     fp = os.path.join(htc.DEFAULT_DIRS['figures'], 'input_output.png')
     fig.savefig(fp, bbox_inches='tight')
 
@@ -974,7 +1025,7 @@ if __name__ == '__main__':
             'gam_nu': 1e-03, # vibrational damping rate
             'dt': 0.5, # interval at which solution is sampled. Does not affect accuracy of solution 
             }
-    pump_strengths = np.logspace(-3, 0, num=2) # set pump strength magnitudes for input-output curve
+    pump_strengths = np.logspace(-3, 0, num=5) # set pump strength magnitudes for input-output curve
     plot_input_output(parameters, pump_strengths, tend=100) # all other parameters fixed
     #plot_dynamics_and_final_state(parameters) # previous code
 
