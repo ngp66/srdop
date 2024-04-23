@@ -965,7 +965,7 @@ def plot_input_output(parameters, pump_strengths, tend=100):
     axes[1,0].set_xscale('log') # Log x-axis
     #axes[1,0].set_yscale('log') # Log y-axis
     #axes[1,1].set_yscale('log') # Log y-axis
-    axes[1,0].plot(ratios, (1/htc.Nk)*(2*nM_tots/htc.NE-1))
+    axes[1,0].plot(ratios, 2*nM_tots/(htc.NE*htc.Nk)-1)
     for i in select_indices:
         plabel = r'${}$'.format(round(ratios[i],5))
         axes[1,1].plot(htc.rs, 2*nM_final[i, :]/htc.NE-1, label=plabel)
