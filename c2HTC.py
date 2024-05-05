@@ -23,8 +23,9 @@ logger = logging.getLogger(__name__)
 
 try:
     from gmanp import pBasis, Pauli, Boson
-except ModuleNotFoundError:
-    logger.critical('gmanp.py not found in current working directory')
+except ModuleNotFoundError as e:
+    logger.critical(e)
+    #logger.critical('gmanp.py not found in current working directory')
     sys.exit(1)
 
 plt.rcParams.update({
@@ -264,7 +265,7 @@ class HTC:
         for i, K in enumerate(shifted_Ks):
             for j, P in enumerate(shifted_Ks):
                 # EDIT 2023-10-26: Fixed sign of omega term!
-                coeffs['11_pk'][j,i] = (1j * self.omega_diff(P,K) - 0.5 * self.kappa_sum(P,K))
+                coeffs['11_pk'][j,i] = (1j * self.omega_diff(P,K) - 0.5 * self.kappa_sum(P,K))[0]
         # 2024-04-02 elements now with n dependence: 21_00n, (22_0n,) 31_11kn, 41_11n, 42_11n
         coeffs['12_1'] = 1j * consts['Bp']
         coeffs['13_1'] = coeffs['12_1'].conj()
@@ -317,8 +318,12 @@ class HTC:
         ocoeffs['rn'] = params['delta_r'] * self.ns
         ocoeffs['rn2'] = ocoeffs['rn']**2
         ocoeffs['msrn'] = (ocoeffs['rn'] - 0.5 * params['L'])**2
-        v_ops = [np.kron(si, np.diag([1.0 if i==j else 0.0 for i in range(Nnu)])) for j in range(Nnu)]
+        v_ops = [np.kron(si, # si = identity i.e. no condition on electronic state
+                         np.diag([1.0 if i==j else 0.0 for i in range(Nnu)])) for j in range(Nnu)]
+        ev_ops = [np.kron(Pauli.p1, # vibrational populations conditioned on excited electronic state
+                          np.diag([1.0 if i==j else 0.0 for i in range(Nnu)])) for j in range(Nnu)]
         ocoeffs['vpops'] = [self.gp.get_coefficients(v_op, sgn=0, eye=True) for v_op in v_ops]
+        ocoeffs['evpops'] = [self.gp.get_coefficients(ev_op, sgn=0, eye=True) for ev_op in ev_ops]
         # assign to instance variables
         self.consts, self.coeffs, self.ocoeffs = consts, coeffs, ocoeffs
 
@@ -348,11 +353,13 @@ class HTC:
         return omega_0 + prefactor * (term1 + term2)
 
     def omega(self, Ks):
-        if type(Ks) is not np.ndarray:
-            Ks = np.array([Ks])
+        Ks = np.atleast_1d(Ks)
+        #if type(Ks) is not np.ndarray:
+        #    Ks = np.array([Ks])
         return np.array([self.omega_single(K) for K in Ks])
 
     def kappa(self, K):
+        K = np.atleast_1d(K)
         return self.params['kappa'] * np.ones_like(K)
 
     def gaussian(self, r, _max, _width, _offset=0):
@@ -366,9 +373,11 @@ class HTC:
         return self.gaussian(r, self.params['pump_strength'], self.params['pump_width'])
 
     def decay(self, n):
+        n = np.atleast_1d(n)
         return self.params['decay'] * np.ones_like(n)
 
     def dephase(self, n):
+        n = np.atleast_1d(n)
         return self.params['dephase'] * np.ones_like(n)
 
     def deltak(self, k=0):
@@ -501,9 +510,11 @@ class HTC:
                             'solver_tend': rk45.t, 'status': rk45.status, 
                             'runtime': self.compute_time}
         #logger.info('...done ({:.0f}s)'.format(self.compute_time))
+        self.rescale_state(y)
         self.results = {'parameters': self.params,
                         'dynamics': self.dynamics,
                         'solver_info': self.solver_info,
+                        'final_state': y, # save entire final state
                         }
         return self.results
 
@@ -521,7 +532,8 @@ class HTC:
         g1s = np.zeros((Nt, self.Nk), dtype=complex)
         #g1s = np.zeros((Nt, self.Nk, self.Nk), dtype=complex)
         Vs = np.zeros((Nt, self.Q0+1), dtype=float)
-        vpops = np.zeros((Nt, self.Nk, self.Nnu), dtype=float)
+        vpops = np.zeros((Nt, self.Nnu, self.Nk), dtype=float) # 2024-05-05 r_n index now last
+        #vpops = np.zeros((Nt, self.Nk, self.Nnu), dtype=float)
         self.dynamics = {'t': self.t_fs,
                          'r': self.rs, 
                          'nP': nPs,
@@ -563,7 +575,7 @@ class HTC:
         nk = fftshift(np.diag(ada))
         self.check_real(t_index, nk, 'Photon number (k-space)')
         alpha = ifft(ada, axis=0) # including 1/N_k normalisation!
-        dft2 = fft(alpha, axis=-1)
+        dft2 = fft(alpha, axis=-1) # real space so no fftshift... (start with position 0...)
         nph = np.diag(dft2) # n(r_n) when n=m
         self.check_real(t_index, nph, 'Photon density')
         # Previous code - calculated g^(1)(r_n, R)
@@ -627,7 +639,8 @@ class HTC:
         vpops = [contract('a,an->n', self.ocoeffs['vpops'][V][0], l) + self.ocoeffs['vpops'][V][1]
                        for V in range(len(self.ocoeffs['vpops']))]
         self.check_real(t_index, vpops, 'Vibrational populations')
-        self.dynamics['vpop'][t_index] = np.real(vpops).T # N index first
+        #self.dynamics['vpop'][t_index] = np.real(vpops).T # transpose -> r_n index first
+        self.dynamics['vpop'][t_index] = np.real(vpops)
 
     def rescale_state(self, state):
         """Rescale state before calculating physical dynamics
@@ -781,7 +794,8 @@ class HTC:
         ax1.legend()
         final_vpops = self.dynamics['vpop'][-1]
         for i in range(self.Nnu):
-            ax2.plot(self.rs, final_vpops[:,i], label=r'$i={}$'.format(i))
+            # 2024-05-05: Now vpop first index is level, second r_n
+            ax2.plot(self.rs, final_vpops[i,:], label=r'$i={}$'.format(i))
         ax2.legend(title='level $i$')
         ax2.set_xlabel(self.labels['rn'])
         ax2.set_title(r'Vibrational populations')
@@ -924,10 +938,15 @@ def plot_input_output(parameters, pump_strengths, tend=100):
     params = parameters
     num_pumps = len(pump_strengths)
     ratios = np.array(pump_strengths) / params['decay']
-    nph_final = np.zeros((num_pumps, 2*params['Q0']+1), dtype=float)
-    nK_final = np.zeros((num_pumps, 2*params['Q0']+1), dtype=float)
-    nM_final = np.zeros((num_pumps, 2*params['Q0']+1), dtype=float)
-    nvpop_final = np.zeros((num_pumps, 2*params['Q0']+1), dtype=float)
+    Nk = 2*params['Q0']+1
+    nph_final = np.zeros((num_pumps, Nk), dtype=float)
+    nK_final = np.zeros((num_pumps, Nk), dtype=float)
+    nM_final = np.zeros((num_pumps, Nk), dtype=float)
+    nvpop_final = np.zeros((num_pumps, Nk), dtype=float)
+    evpops_final = np.zeros((num_pumps, params['Nnu'], Nk), dtype=float) # vibrational pops conditioned on electronic excited state
+    gvpops_final = np.zeros((num_pumps, params['Nnu'], Nk), dtype=float) # electronic ground state
+    adaga_final = np.zeros((num_pumps, Nk, Nk), dtype=complex) 
+    span_final = np.zeros((num_pumps, Nk), dtype=complex) 
     for i, pump in enumerate(pump_strengths):
         logger.info(f'On pump {i+1} of {num_pumps}')
         params['pump_strength'] = pump
@@ -936,8 +955,23 @@ def plot_input_output(parameters, pump_strengths, tend=100):
         nph_final[i, :] = results['dynamics']['nP'][-1, :]
         nK_final[i, :] = results['dynamics']['nK'][-1, :]
         nM_final[i, :] = results['dynamics']['nM'][-1, :]
-        nvpop_final[i, :] = results['dynamics']['vpop'][-1, :, -1] # highest vibrational state
-    fig, axes = plt.subplots(3, 2, figsize=(8,12), constrained_layout=True)
+        nvpop_final[i, :] = results['dynamics']['vpop'][-1, -1,:] # highest vibrational state (irrespective of electronic state)
+        ada, l, al, ll = htc.split_reshape_return(results['final_state'],
+                                                   check_rescaled=True) # final state variables
+        adaga_final[i, :, :] = fftshift(ada)
+        an_l = fft(al, axis=1) # index i, then k, then n ! (see EoMs). No normalisation (choice)
+        #print(contract('imn,i->mn', htc.gp.basis[htc.gp.indices[1]], htc.ocoeffs['sp_l']))
+        an_spn = np.diag(contract('imn,i->mn', an_l, htc.ocoeffs['sp_l']))
+        span_final[i, :] = an_spn
+        v_pops = results['dynamics']['vpop'][-1, :, :]
+        ev_pops = np.real(
+            [contract('a,an->n', htc.ocoeffs['evpops'][V][0], l) + htc.ocoeffs['evpops'][V][1]
+             for V in range(len(htc.ocoeffs['evpops']))]
+            ) #.T # transpose to put r_n index first (no longer needed)
+        gv_pops = np.real([v_pops[j,:] - ev_pops[j,:] for j in range(params['Nnu'])])
+        evpops_final[i, :, :] = ev_pops
+        gvpops_final[i, :, :] = gv_pops
+    fig, axes = plt.subplots(3, 3, figsize=(12,12), constrained_layout=True)
     nph_tots = np.sum(nph_final, axis=1) # Sum over all lattice positions 
     nM_tots = np.sum(nM_final, axis=1) # sum over all lattice positions
     axes[0,0].set_xlabel(r'$\Gamma_\uparrow(L/2)/\Gamma_\downarrow$')
@@ -947,6 +981,7 @@ def plot_input_output(parameters, pump_strengths, tend=100):
     axes[0,0].plot(ratios, nph_tots)
     axes[0,0].set_xscale('log') # Log x-axis
     axes[0,0].set_yscale('log') # Log y-axis
+    axes[0,2].set_yscale('log') # Log y-axis
     num_cross_sections = min(5, num_pumps)  # maximum number of cross-sections
     select_indices = np.round(np.linspace(0, num_pumps-1, num_cross_sections)).astype(int)
     for i in select_indices:
@@ -958,31 +993,64 @@ def plot_input_output(parameters, pump_strengths, tend=100):
     axes[1,0].set_xlabel(r'$\Gamma_\uparrow(L/2)/\Gamma_\downarrow$')
     axes[1,1].set_xlabel(r'$r_n (\mu \text{\rm{m}})$')
     fig.suptitle(r'\(t_{{\text{{\rm{{end}}}}}}={}\)'.format(tend) + r' \rm{(fs)}' + r' \(N_\nu={}\)'.format(params['Nnu']))
-    axes[1,0].set_title(r'\rm{average inversion}')
+    axes[1,0].set_title(r'\rm{average inversion (over all sites)}')
     #axes[1,0].set_title(r'$(1/N_M)\sum_n (2n_{{\text{{M}}}}(t={}, r_n)/N_E-1) (av. inversion)$'.format(tend))
     axes[1,1].set_title(r'\rm{emitter inversion}')
     #axes[1,1].set_title(r'$2n_{{\text{{M}}}}(t={}, r_n)/N_E-1$ (emitter inversion)'.format(tend))
     axes[1,0].set_xscale('log') # Log x-axis
-    #axes[1,0].set_yscale('log') # Log y-axis
-    #axes[1,1].set_yscale('log') # Log y-axis
     axes[1,0].plot(ratios, 2*nM_tots/(htc.NE*htc.Nk)-1)
+    chosen_nu = htc.Nnu - 1
     for i in select_indices:
         plabel = r'${}$'.format(round(ratios[i],5))
         axes[1,1].plot(htc.rs, 2*nM_final[i, :]/htc.NE-1, label=plabel)
-        axes[2,1].plot(htc.ks, nK_final[i, :], label=plabel)
-        axes[2,0].plot(htc.rs, nvpop_final[i, :], label=plabel)
-        #axes[2,1].plot(htc.ks, ifftshift(nK_final[i, :]), label=r'${}$'.format(round(ratios[i],5)), ls='--')
-    axes[1,1].legend(title=r'$\Gamma_\uparrow(L/2)/\Gamma_\downarrow$')
-    axes[2,1].legend(title=r'$\Gamma_\uparrow(L/2)/\Gamma_\downarrow$')
-    axes[2,1].set_xlabel(htc.labels['k'])
-    axes[2,1].set_title(r'$\langle a_k^\dagger a_k\rangle$')
-    axes[2,1].set_yscale('log') # Log y-axis
-    #axes[2,0].axis('off') # TURN OFF AXIS
+        axes[2,0].plot(htc.rs, gvpops_final[i, chosen_nu, :], label=plabel)
+        axes[2,1].plot(htc.rs, evpops_final[i, chosen_nu, :], label=plabel)
+        axes[2,2].plot(htc.rs, evpops_final[i, chosen_nu, :]+gvpops_final[i, chosen_nu, :], label=plabel)
+        #axes[2,2].plot(htc.rs, evpops_final[i, -1, :], label=plabel)
+        axes[0,2].plot(htc.rs, np.abs(span_final[i]), label=plabel) 
+    pump_title = r'$\Gamma_\uparrow(L/2)/\Gamma_\downarrow$'
+    axes[1,1].legend(title=pump_title)
+    axes[0,2].set_title(r'$\left\lvert \langle a(r_n) \sigma^+(r_n) \rangle \right\rvert$')
+    axes[0,2].legend(title=pump_title)
     axes[2,0].set_xlabel(r'$r_n (\mu \text{\rm{m}})$')
-    axes[2,0].set_title(r'\rm{vibrational pop level} ' + r'\(N_\nu-1={}\)'.format(htc.Nnu-1))
-    axes[2,0].legend()
+    axes[2,1].set_xlabel(r'$r_n (\mu \text{\rm{m}})$')
+    axes[0,2].set_xlabel(r'$r_n (\mu \text{\rm{m}})$')
+    axes[2,2].set_xlabel(r'$r_n (\mu \text{\rm{m}})$')
+    axes[2,0].set_title(r'\rm{pop. } ' + r'$\lvert g,\nu={} \rangle$'.format(chosen_nu))
+    axes[2,1].set_title(r'\rm{pop. } ' + r'$\lvert e,\nu={} \rangle$'.format(chosen_nu))
+    axes[2,2].set_title(r'\rm{pop. } ' + r'$\lvert \nu={} \rangle$'.format(chosen_nu))
+    axes[2,0].legend(title=pump_title)
+    axes[2,1].legend(title=pump_title)
+    axes[2,2].legend(title=pump_title)
     fp = os.path.join(htc.DEFAULT_DIRS['figures'], 'input_output.png')
-    fig.savefig(fp, bbox_inches='tight')
+    fig.savefig(fp, bbox_inches='tight', dpi=450)
+    axes[1,2].set_axis_off()
+    axes[2,2].set_axis_off()
+    # k-space
+    num_rows = int(np.ceil(num_cross_sections/2))
+    fig2, axes2 = plt.subplots(num_rows, 2, figsize=(8,4*num_rows), constrained_layout=True)
+    axes2 = axes2.flatten()
+    #cm = colormaps['coolwarm'] 
+    cm = colormaps['viridis'] 
+    #extent = [-params['Q0'], params['Q0'], -params['Q0'], params['Q0']]
+    extent = [htc.ks[0], htc.ks[-1],htc.ks[0], htc.ks[-1]]
+    my_im = lambda axis, vals: axis.imshow(vals, origin='lower', aspect='auto',
+                                           interpolation='none', extent=extent, cmap=cm)
+    ticks = [np.pi/htc.params['delta_r'] * x for x in [-1, -0.5, 0, 0.5, 1]]
+    tick_labels = [r'$-\pi/\Delta r$', r'$-\pi/2\Delta r$',r'$0$', r'$\pi/2\Delta r $',r'$\pi/\Delta r $']
+    for i in select_indices:
+        plabel = r'${}$'.format(round(ratios[i],5))
+        im = my_im(axes2[i], fftshift(adaga_final[i,:,:].real))
+        cbar = fig2.colorbar(im, ax=axes2[i], aspect=20)
+        axes2[i].set_xlabel(r'$k$')
+        axes2[i].set_xticks(ticks)
+        axes2[i].set_xticklabels(tick_labels)
+        axes2[i].set_yticks(ticks)
+        axes2[i].set_yticklabels(tick_labels)
+        axes2[i].set_title(pump_title + r'$=$'+plabel)
+    fig2.suptitle(r'$\langle a^{\dagger}_{k^\prime} a_k \rangle$')
+    fp = os.path.join(htc.DEFAULT_DIRS['figures'], 'adaggera.png')
+    fig2.savefig(fp, bbox_inches='tight', dpi=600)
 
 def plot_dynamics_and_final_state(parameters):
     # 2024-04-05 - Dynamics and steady state
@@ -1025,7 +1093,7 @@ if __name__ == '__main__':
             'gam_nu': 1e-03, # vibrational damping rate
             'dt': 0.5, # interval at which solution is sampled. Does not affect accuracy of solution 
             }
-    pump_strengths = np.logspace(-3, 0, num=5) # set pump strength magnitudes for input-output curve
+    pump_strengths = np.logspace(-3,0, num=5) # set pump strength magnitudes for input-output curve
     plot_input_output(parameters, pump_strengths, tend=100) # all other parameters fixed
     #plot_dynamics_and_final_state(parameters) # previous code
 
