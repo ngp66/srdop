@@ -47,6 +47,7 @@ class HTC:
             'a': 40, # Nanoparticle radius, nm (Chain length L = N_k * Delta_r = 10.0 nm)
             'omega_p': 1.88, # Plasmon resonance, eV
             'omega_0': 1.86, # Dye resonance, eV
+            't': 0.2, # Hopping strength, eV
             'g': 0.095, # Individual light-matter coupling, eV (collective gSqrt(NE))
             'kappa': 1e-01, # photon loss
             'dephase': 0.0, # Emitter pure dephasing
@@ -59,6 +60,7 @@ class HTC:
             'T':0.026, # k_B T in eV (.026=302K)
             'gam_nu': 1e-03, # vibrational damping rate
             'dt': 0.5, # interval at which solution is sampled. Does not affect accuracy of solution 
+            'model': 'plasmonic', # or 'tight-binding' - sets the dispersion
             }
 
     @classmethod
@@ -352,10 +354,14 @@ class HTC:
         * np.log(np.abs(c**2*k**2-omega_0_HZ_NM**2)/(cutoff_HZ_NM**2-omega_0_HZ_NM**2))
         return omega_0 + prefactor * (term1 + term2)
 
+    def omega_hop(self, K):
+        kdr = K * (2*np.pi/self.Nk)
+        return - 2 * self.params['t'] * np.cos(kdr)
+
     def omega(self, Ks):
+        if self.params['model'] == 'tight-binding':
+            return self.omega_hop(Ks)
         Ks = np.atleast_1d(Ks)
-        #if type(Ks) is not np.ndarray:
-        #    Ks = np.array([Ks])
         return np.array([self.omega_single(K) for K in Ks])
 
     def kappa(self, K):
@@ -913,7 +919,7 @@ class HTC:
         fig.suptitle(f'Emitter positions / discrete modes shown in red ($N_k={self.Nk}$)')
         axes[0].set_xlabel(r'$k$ \rm{(}$\mu$\rm{m}${}^{-1}$\rm{)}')
         axes[0].set_title(r'$\hbar\omega$ \rm{(eV)}')
-        axes[1].set_xlabel(self.labels['rn'])
+        #axes[1].set_xlabel(self.labels['rn'])
         axes[1].set_title(r'$\Gamma_\uparrow(r_n)\ (\sigma={}$\rm{{nm}}$)$'.format(
             self.params['pump_width']))
         all_Ks = np.linspace(self.Ks[0],self.Ks[-1], 250)
@@ -926,8 +932,8 @@ class HTC:
         select_pumps = self.pump(self.ns)
         axes[0].plot(all_ks, all_y)
         axes[0].scatter(self.ks * 1e3, chosen_y, c='r', s=8, zorder=2)
-        axes[1].plot(all_rs, all_pumps)
-        axes[1].scatter(self.rs, select_pumps, c='r', s=8, zorder=2)
+        axes[1].plot(all_ns, all_pumps)
+        axes[1].scatter(self.ns, select_pumps, c='r', s=8, zorder=2)
         fp = os.path.join(self.DEFAULT_DIRS['figures'], 'dispersion_pump.png')
         fig.savefig(fp, bbox_inches='tight', dpi=350)
         logger.info(f'Dispersion and pump profile saved to {fp}.')
@@ -946,6 +952,7 @@ def plot_input_output(parameters, pump_strengths, tend=100):
     evpops_final = np.zeros((num_pumps, params['Nnu'], Nk), dtype=float) # vibrational pops conditioned on electronic excited state
     gvpops_final = np.zeros((num_pumps, params['Nnu'], Nk), dtype=float) # electronic ground state
     adaga_final = np.zeros((num_pumps, Nk, Nk), dtype=complex) 
+    n_nm_final = np.zeros((num_pumps, Nk, Nk), dtype=complex) 
     span_final = np.zeros((num_pumps, Nk), dtype=complex) 
     for i, pump in enumerate(pump_strengths):
         logger.info(f'On pump {i+1} of {num_pumps}')
@@ -958,7 +965,8 @@ def plot_input_output(parameters, pump_strengths, tend=100):
         nvpop_final[i, :] = results['dynamics']['vpop'][-1, -1,:] # highest vibrational state (irrespective of electronic state)
         ada, l, al, ll = htc.split_reshape_return(results['final_state'],
                                                    check_rescaled=True) # final state variables
-        adaga_final[i, :, :] = fftshift(ada)
+        n_nm_final[i, :, :] = fft(ifft(ada, axis=0), axis=1)
+        adaga_final[i, :, :] = ada #fftshift(ada)
         an_l = fft(al, axis=1) # index i, then k, then n ! (see EoMs). No normalisation (choice)
         #print(contract('imn,i->mn', htc.gp.basis[htc.gp.indices[1]], htc.ocoeffs['sp_l']))
         an_spn = np.diag(contract('imn,i->mn', an_l, htc.ocoeffs['sp_l']))
@@ -971,6 +979,7 @@ def plot_input_output(parameters, pump_strengths, tend=100):
         gv_pops = np.real([v_pops[j,:] - ev_pops[j,:] for j in range(params['Nnu'])])
         evpops_final[i, :, :] = ev_pops
         gvpops_final[i, :, :] = gv_pops
+    htc.plot_dispersion_and_pump()
     fig, axes = plt.subplots(3, 3, figsize=(12,12), constrained_layout=True)
     nph_tots = np.sum(nph_final, axis=1) # Sum over all lattice positions 
     nM_tots = np.sum(nM_final, axis=1) # sum over all lattice positions
@@ -1022,10 +1031,27 @@ def plot_input_output(parameters, pump_strengths, tend=100):
     axes[2,0].legend(title=pump_title)
     axes[2,1].legend(title=pump_title)
     axes[2,2].legend(title=pump_title)
+    #axes[2,2].set_axis_off()
+    #axes[1,2].set_axis_off()
+    params = htc.params
+    pump_width = round(params['pump_width'] * np.sqrt(2) / params['delta_r'])
+    para_strs = \
+            [r'$N_E={}$'.format(htc.NE),
+             r'$\kappa={}$'.format(params['kappa']),
+             r'$t={}$'.format(params['t']),
+             r'$g={}$'.format(params['g']),
+             r'$\Gamma_z={}$'.format(params['dephase']),
+             r'$\Gamma_\downarrow={}$'.format(params['decay']),
+             r'\rm{{pumpwidth}}$\ ={}$ \rm{{sites}}'.format(pump_width),
+             r'$\omega_0={}$'.format(params['omega_0']),
+             ]
+    axes[1,2].get_xaxis().set_visible(False)
+    axes[1,2].get_yaxis().set_visible(False)
+    axes[1,2].text(0.5,0.8, '\n'.join(para_strs), ha='center', va='top', transform=axes[1,2].transAxes,
+                   size='x-large')
     fp = os.path.join(htc.DEFAULT_DIRS['figures'], 'input_output.png')
     fig.savefig(fp, bbox_inches='tight', dpi=450)
-    axes[1,2].set_axis_off()
-    axes[2,2].set_axis_off()
+    plt.close(fig)
     # k-space
     num_rows = int(np.ceil(num_cross_sections/2))
     fig2, axes2 = plt.subplots(num_rows, 2, figsize=(8,4*num_rows), constrained_layout=True)
@@ -1038,19 +1064,36 @@ def plot_input_output(parameters, pump_strengths, tend=100):
                                            interpolation='none', extent=extent, cmap=cm)
     ticks = [np.pi/htc.params['delta_r'] * x for x in [-1, -0.5, 0, 0.5, 1]]
     tick_labels = [r'$-\pi/\Delta r$', r'$-\pi/2\Delta r$',r'$0$', r'$\pi/2\Delta r $',r'$\pi/\Delta r $']
-    for i in select_indices:
-        plabel = r'${}$'.format(round(ratios[i],5))
-        im = my_im(axes2[i], fftshift(adaga_final[i,:,:].real))
-        cbar = fig2.colorbar(im, ax=axes2[i], aspect=20)
-        axes2[i].set_xlabel(r'$k$')
-        axes2[i].set_xticks(ticks)
-        axes2[i].set_xticklabels(tick_labels)
-        axes2[i].set_yticks(ticks)
-        axes2[i].set_yticklabels(tick_labels)
-        axes2[i].set_title(pump_title + r'$=$'+plabel)
+    for i_a, i in enumerate(select_indices):
+        plabel = r'${}$'.format(round(ratios[i_a],5))
+        im = my_im(axes2[i_a], fftshift(adaga_final[i,:,:].real))
+        cbar = fig2.colorbar(im, ax=axes2[i_a], aspect=20)
+        axes2[i_a].set_xlabel(r'$k^\prime$', rotation=0)
+        axes2[i_a].set_ylabel(r'$k$')
+        axes2[i_a].set_xticks(ticks)
+        axes2[i_a].set_xticklabels(tick_labels)
+        axes2[i_a].set_yticks(ticks)
+        axes2[i_a].set_yticklabels(tick_labels)
+        axes2[i_a].set_title(pump_title + r'$=$'+plabel)
     fig2.suptitle(r'$\langle a^{\dagger}_{k^\prime} a_k \rangle$')
     fp = os.path.join(htc.DEFAULT_DIRS['figures'], 'adaggera.png')
     fig2.savefig(fp, bbox_inches='tight', dpi=600)
+    plt.close(fig2)
+    fig3, axes3 = plt.subplots(num_rows, 2, figsize=(8,4*num_rows), constrained_layout=True)
+    axes3 = axes3.flatten()
+    cm = colormaps['viridis'] 
+    extent = [-params['Q0'], params['Q0'], -params['Q0'], params['Q0']]
+    for i_a, i in enumerate(select_indices):
+        plabel = r'${}$'.format(round(ratios[i_a],5))
+        im = my_im(axes3[i_a], np.abs(n_nm_final[i,:,:]))
+        cbar = fig3.colorbar(im, ax=axes3[i_a], aspect=20)
+        axes3[i_a].set_xlabel(r'$m$')
+        axes3[i_a].set_ylabel(r'$n$', rotation=0)
+        axes3[i_a].set_title(pump_title + r'$=$'+plabel)
+    fig3.suptitle(r'$\lvert n_{nm} \rvert$')
+    fp = os.path.join(htc.DEFAULT_DIRS['figures'], 'n_nm.png')
+    fig3.savefig(fp, bbox_inches='tight', dpi=600)
+    plt.close(fig3)
 
 def plot_dynamics_and_final_state(parameters):
     # 2024-04-05 - Dynamics and steady state
@@ -1073,27 +1116,52 @@ if __name__ == '__main__':
         format='%(filename)s L%(lineno)s %(asctime)s %(levelname)s: %(message)s',
         level=logging.INFO,
         datefmt='%H:%M')
-    parameters = {
-            'Q0': 61, # N_k = 2*Q0+1 nanoparticles (123)
-            'NE': 4, # Number of emitters per gap
-            'w': 1, # Gap width, nm (Emitter spacing Delta_r = 2a+w = 81nm)
-            'a': 40, # Nanoparticle radius, nm (Chain length L = N_k * Delta_r = 10.0 nm)
-            'omega_p': 1.88, # Plasmon resonance, eV
-            'omega_0': 1.86, # Dye resonance, eV
-            'g': 0.095, # Individual light-matter coupling, eV (collective gSqrt(NE))
-            'kappa': 1e-01, # photon loss
+    #plasmon_parameters = {
+    #        'Q0': 61, # N_k = 2*Q0+1 nanoparticles (123)
+    #        'NE': 4, # Number of emitters per gap
+    #        'w': 1, # Gap width, nm (Emitter spacing Delta_r = 2a+w = 81nm)
+    #        'a': 40, # Nanoparticle radius, nm (Chain length L = N_k * Delta_r = 10.0 nm)
+    #        'omega_p': 1.88, # Plasmon resonance, eV
+    #        'omega_0': 1.86, # Dye resonance, eV
+    #        'g': 0.095, # Individual light-matter coupling, eV (collective gSqrt(NE))
+    #        'kappa': 1e-01, # photon loss
+    #        'dephase': 0.0, # Emitter pure dephasing
+    #        'pump_strength': 1e-01, # Emitter pump magnitude
+    #        'pump_width': 500, # Emitter pump spot width, nm (approx. 6 nanoparticles)
+    #        'decay': 1e-01, # Emitter non-resonant decay
+    #        'Nnu': 2, # Number of vibrational levels for each emitter
+    #        'S': 0.01, # Huang-Rhys parameter
+    #        'omega_nu': 0.19, # Vibrational mode resonance, eV
+    #        'T':0.026, # k_B T in eV (.026=302K)
+    #        'gam_nu': 1e-03, # vibrational damping rate
+    #        'dt': 0.5, # interval at which solution is sampled. Does not affect accuracy of solution 
+    #        'model': 'plasmonic',
+    #        }
+    tb_parameters = {
+            'Q0': 25, # Chain of Nk = 2*Q0+1 = 51 sites
+            'NE': 100, # Number of emitters per gap
+            'w': 1, # Gap width, nm (Emitter spacing Delta_r = 2a+w = 81nm) [not used in dynamics calculation]
+            'a': 40, # Nanoparticle radius, nm (Chain length L = N_k * Delta_r = 10.0 nm) [not used in dynamics]
+            'omega_p': 1.88, # Plasmon resonance, eV [not used in tight-binding model]
+            #'omega_0': 1.86, # Dye resonance, eV 
+            'omega_0': 0.0, # Dye resonance, eV [0 for tight-binding model??]
+            't': 0.2, # hopping parameter, eV [not used in plasmonic model]
+            'g': 0.01, # Individual light-matter coupling, eV, g=0.1/sqrt(NE) 
+            'kappa': 0.1, # photon loss
             'dephase': 0.0, # Emitter pure dephasing
-            'pump_strength': 1e-01, # Emitter pump magnitude
-            'pump_width': 500, # Emitter pump spot width, nm (approx. 6 nanoparticles)
-            'decay': 1e-01, # Emitter non-resonant decay
-            'Nnu': 2, # Number of vibrational levels for each emitter
-            'S': 0.01, # Huang-Rhys parameter
-            'omega_nu': 0.19, # Vibrational mode resonance, eV
-            'T':0.026, # k_B T in eV (.026=302K)
-            'gam_nu': 1e-03, # vibrational damping rate
+            'pump_strength': 0.1, #  Magnitude of pump strength (changed in plot_input_output below)
+            #'pump_width': 324, # Pump spot width, nm (4 sites = 4 * Delta r = 4 * 81 = 324nm)
+            'pump_width': 229, # Pump spot width, nm, to match JB Aexp{-((n-25)/4)^2} (see def gaussian above)
+            'decay': 0.05, # Emitter non-resonant decay
+            'Nnu': 1, # Number of vibrational levels for each emitter
+            'S': 0.0, # Huang-Rhys parameter [Not relevant if Nnu=1]
+            'omega_nu': 0.19, # Vibrational mode resonance, eV [N/A when Nnu=1]
+            'T':0.026, # k_B T in eV for vibrational environment (.026=302K) [N/A when Nnu=1]
+            'gam_nu': 1e-03, # vibrational damping rate [N/A when Nnu=1]
             'dt': 0.5, # interval at which solution is sampled. Does not affect accuracy of solution 
+            'model': 'tight-binding', # dispersion to use 
             }
-    pump_strengths = np.logspace(-3,0, num=5) # set pump strength magnitudes for input-output curve
-    plot_input_output(parameters, pump_strengths, tend=100) # all other parameters fixed
-    #plot_dynamics_and_final_state(parameters) # previous code
+    pump_strengths = np.logspace(-3, 0.6, num=50) # set pump strength magnitudes for input-output curve
+    plot_input_output(tb_parameters, pump_strengths, tend=100) # all other parameters fixed
+    #plot_dynamics_and_final_state(tb_parameters) 
 
