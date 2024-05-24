@@ -931,13 +931,20 @@ class HTC:
         all_pumps = self.pump(all_ns)
         select_pumps = self.pump(self.ns)
         axes[0].plot(all_ks, all_y)
-        axes[0].scatter(self.ks * 1e3, chosen_y, c='r', s=8, zorder=2)
+        #axes[0].scatter(self.ks * 1e3, chosen_y, c='r', s=8, zorder=2)
+        axes[0].axhline(self.params['omega_0'], c='r')
         axes[1].plot(all_ns, all_pumps)
         axes[1].scatter(self.ns, select_pumps, c='r', s=8, zorder=2)
         fp = os.path.join(self.DEFAULT_DIRS['figures'], 'dispersion_pump.png')
         fig.savefig(fp, bbox_inches='tight', dpi=350)
         logger.info(f'Dispersion and pump profile saved to {fp}.')
         plt.close(fig)
+    
+    @staticmethod
+    def J(n_nm, t=1.0):
+        J_R = 1j*t*np.concatenate(([n_nm[0,-1]], np.diag(n_nm, k=-1)))
+        J_L = 1j*t*np.concatenate(([n_nm[-1,0]], np.diag(n_nm, k=+1)))
+        return J_R - J_L
 
 def plot_input_output(parameters, pump_strengths, tend=100):
     # 2024-04-16
@@ -954,6 +961,7 @@ def plot_input_output(parameters, pump_strengths, tend=100):
     adaga_final = np.zeros((num_pumps, Nk, Nk), dtype=complex) 
     n_nm_final = np.zeros((num_pumps, Nk, Nk), dtype=complex) 
     span_final = np.zeros((num_pumps, Nk), dtype=complex) 
+    Js_final = np.zeros((num_pumps, Nk), dtype=complex)
     for i, pump in enumerate(pump_strengths):
         logger.info(f'On pump {i+1} of {num_pumps}')
         params['pump_strength'] = pump
@@ -966,6 +974,7 @@ def plot_input_output(parameters, pump_strengths, tend=100):
         ada, l, al, ll = htc.split_reshape_return(results['final_state'],
                                                    check_rescaled=True) # final state variables
         n_nm_final[i, :, :] = fft(ifft(ada, axis=0), axis=1)
+        Js_final[i, :] = htc.J(n_nm_final[i,:,:])
         adaga_final[i, :, :] = ada #fftshift(ada)
         an_l = fft(al, axis=1) # index i, then k, then n ! (see EoMs). No normalisation (choice)
         #print(contract('imn,i->mn', htc.gp.basis[htc.gp.indices[1]], htc.ocoeffs['sp_l']))
@@ -984,23 +993,23 @@ def plot_input_output(parameters, pump_strengths, tend=100):
     nph_tots = np.sum(nph_final, axis=1) # Sum over all lattice positions 
     nM_tots = np.sum(nM_final, axis=1) # sum over all lattice positions
     axes[0,0].set_xlabel(r'$\Gamma_\uparrow(L/2)/\Gamma_\downarrow$')
-    axes[0,1].set_xlabel(r'$r_n (\mu \text{\rm{m}})$')
+    #axes[0,1].set_xlabel(r'$r_n (\mu \text{\rm{m}})$')
     axes[0,0].set_title(r'$\sum_n n_{{\text{{ph}}}}(r_n)$')
     #axes[0,0].set_title(r'$\sum_n n_{{\text{{ph}}}}(t={}, r_n)$'.format(tend))
     axes[0,0].plot(ratios, nph_tots)
     axes[0,0].set_xscale('log') # Log x-axis
     axes[0,0].set_yscale('log') # Log y-axis
-    axes[0,2].set_yscale('log') # Log y-axis
+    #axes[0,2].set_yscale('log') # Log y-axis
     num_cross_sections = min(5, num_pumps)  # maximum number of cross-sections
     select_indices = np.round(np.linspace(0, num_pumps-1, num_cross_sections)).astype(int)
     for i in select_indices:
-        axes[0,1].plot(htc.rs, nph_final[i, :], label=r'${}$'.format(round(ratios[i],5)))
-    axes[0,1].set_yscale('log') # Log y-axis
+        axes[0,1].plot(htc.ns, nph_final[i, :], label=r'${}$'.format(round(ratios[i],5)))
+    #axes[0,1].set_yscale('log') # Log y-axis
     axes[0,1].set_title(r'$n_{{\text{{ph}}}}(r_n)$'.format(tend))
     #axes[0,1].set_title(r'$n_{{\text{{ph}}}}(t={}, r_n)$'.format(tend))
     axes[0,1].legend(title=r'$\Gamma_\uparrow(L/2)/\Gamma_\downarrow$')
     axes[1,0].set_xlabel(r'$\Gamma_\uparrow(L/2)/\Gamma_\downarrow$')
-    axes[1,1].set_xlabel(r'$r_n (\mu \text{\rm{m}})$')
+    #axes[1,1].set_xlabel(r'$r_n (\mu \text{\rm{m}})$')
     fig.suptitle(r'\(t_{{\text{{\rm{{end}}}}}}={}\)'.format(tend) + r' \rm{(fs)}' + r' \(N_\nu={}\)'.format(params['Nnu']))
     axes[1,0].set_title(r'\rm{average inversion (over all sites)}')
     #axes[1,0].set_title(r'$(1/N_M)\sum_n (2n_{{\text{{M}}}}(t={}, r_n)/N_E-1) (av. inversion)$'.format(tend))
@@ -1011,23 +1020,30 @@ def plot_input_output(parameters, pump_strengths, tend=100):
     chosen_nu = htc.Nnu - 1
     for i in select_indices:
         plabel = r'${}$'.format(round(ratios[i],5))
-        axes[1,1].plot(htc.rs, 2*nM_final[i, :]/htc.NE-1, label=plabel)
-        axes[2,0].plot(htc.rs, gvpops_final[i, chosen_nu, :], label=plabel)
-        axes[2,1].plot(htc.rs, evpops_final[i, chosen_nu, :], label=plabel)
-        axes[2,2].plot(htc.rs, evpops_final[i, chosen_nu, :]+gvpops_final[i, chosen_nu, :], label=plabel)
+        axes[1,1].plot(htc.ns, 2*nM_final[i, :]/htc.NE-1, label=plabel)
+        axes[2,0].plot(htc.ns, gvpops_final[i, chosen_nu, :], label=plabel)
+        axes[2,1].plot(htc.ns, evpops_final[i, chosen_nu, :], label=plabel)
+        #axes[2,2].plot(htc.ns, evpops_final[i, chosen_nu, :]+gvpops_final[i, chosen_nu, :], label=plabel)
         #axes[2,2].plot(htc.rs, evpops_final[i, -1, :], label=plabel)
-        axes[0,2].plot(htc.rs, np.abs(span_final[i]), label=plabel) 
+        #axes[0,2].plot(htc.ns, np.abs(span_final[i]), label=plabel) 
+        axes[0,2].plot(htc.ns, np.gradient(nph_final[i]), label=plabel) 
+        axes[2,2].plot(htc.ns, np.real(Js_final[i]), label=plabel)
+        #axes[2,2].plot(htc.ns, np.imag(Js_final[i]), label=plabel) # almost 0
     pump_title = r'$\Gamma_\uparrow(L/2)/\Gamma_\downarrow$'
     axes[1,1].legend(title=pump_title)
-    axes[0,2].set_title(r'$\left\lvert \langle a(r_n) \sigma^+(r_n) \rangle \right\rvert$')
+    #axes[0,2].set_title(r'$\left\lvert \langle a(r_n) \sigma^+(r_n) \rangle \right\rvert$')
+    #axes[0,2].set_title(r'$\lvert \nabla \cdot n_{nm}\rvert_{nn}$')
+    axes[0,2].set_title(r'$\nabla n_{{\text{{ph}}}}(r_n)$')
+    axes[2,2].set_title(r'$J_n = J^R_n-J^L_n$')
     axes[0,2].legend(title=pump_title)
-    axes[2,0].set_xlabel(r'$r_n (\mu \text{\rm{m}})$')
-    axes[2,1].set_xlabel(r'$r_n (\mu \text{\rm{m}})$')
-    axes[0,2].set_xlabel(r'$r_n (\mu \text{\rm{m}})$')
-    axes[2,2].set_xlabel(r'$r_n (\mu \text{\rm{m}})$')
+    #axes[2,0].set_xlabel(r'$r_n (\mu \text{\rm{m}})$')
+    #axes[2,1].set_xlabel(r'$r_n (\mu \text{\rm{m}})$')
+    #axes[0,2].set_xlabel(r'$r_n (\mu \text{\rm{m}})$')
+    #axes[2,2].set_xlabel(r'$r_n (\mu \text{\rm{m}})$')
     axes[2,0].set_title(r'\rm{pop. } ' + r'$\lvert g,\nu={} \rangle$'.format(chosen_nu))
     axes[2,1].set_title(r'\rm{pop. } ' + r'$\lvert e,\nu={} \rangle$'.format(chosen_nu))
-    axes[2,2].set_title(r'\rm{pop. } ' + r'$\lvert \nu={} \rangle$'.format(chosen_nu))
+    #axes[2,2].set_title(r'\rm{pop. } ' + r'$\lvert \nu={} \rangle$'.format(chosen_nu))
+    axes[2,2].set_title(r'$J_n$')
     axes[2,0].legend(title=pump_title)
     axes[2,1].legend(title=pump_title)
     axes[2,2].legend(title=pump_title)
@@ -1049,9 +1065,6 @@ def plot_input_output(parameters, pump_strengths, tend=100):
     axes[1,2].get_yaxis().set_visible(False)
     axes[1,2].text(0.5,0.8, '\n'.join(para_strs), ha='center', va='top', transform=axes[1,2].transAxes,
                    size='x-large')
-    fp = os.path.join(htc.DEFAULT_DIRS['figures'], 'input_output.png')
-    fig.savefig(fp, bbox_inches='tight', dpi=450)
-    plt.close(fig)
     # k-space
     num_rows = int(np.ceil(num_cross_sections/2))
     fig2, axes2 = plt.subplots(num_rows, 2, figsize=(8,4*num_rows), constrained_layout=True)
@@ -1094,6 +1107,27 @@ def plot_input_output(parameters, pump_strengths, tend=100):
     fp = os.path.join(htc.DEFAULT_DIRS['figures'], 'n_nm.png')
     fig3.savefig(fp, bbox_inches='tight', dpi=600)
     plt.close(fig3)
+    fig4, axes4 = plt.subplots(num_rows, 2, figsize=(8,4*num_rows), constrained_layout=True)
+    axes4 = axes4.flatten()
+    cm = colormaps['viridis'] 
+    extent = [-params['Q0'], params['Q0'], -params['Q0'], params['Q0']]
+    for i_a, i in enumerate(select_indices):
+        plabel = r'${}$'.format(round(ratios[i_a],5))
+        abs_div = np.abs(np.sum(np.gradient(n_nm_final[i,:,:]),axis=0))
+        #axes[0,2].plot(htc.ns, np.diag(abs_div), label=plabel)
+        #axes[0,2].plot(htc.ns[1:],np.diag(n_nm_final[i,:,:], k=-1))
+        im = my_im(axes4[i_a], abs_div)
+        cbar = fig4.colorbar(im, ax=axes4[i_a], aspect=20)
+        axes4[i_a].set_xlabel(r'$m$')
+        axes4[i_a].set_ylabel(r'$n$', rotation=0)
+        axes4[i_a].set_title(pump_title + r'$=$'+plabel)
+    fig4.suptitle(r'$\lvert\nabla \cdot n_{nm}\rvert$')
+    fp = os.path.join(htc.DEFAULT_DIRS['figures'], 'n_nm_grad.png')
+    fig4.savefig(fp, bbox_inches='tight', dpi=600)
+    plt.close(fig4)
+    fp = os.path.join(htc.DEFAULT_DIRS['figures'], 'input_output.png')
+    fig.savefig(fp, bbox_inches='tight', dpi=450)
+    plt.close(fig)
 
 def plot_dynamics_and_final_state(parameters):
     # 2024-04-05 - Dynamics and steady state
@@ -1116,27 +1150,28 @@ if __name__ == '__main__':
         format='%(filename)s L%(lineno)s %(asctime)s %(levelname)s: %(message)s',
         level=logging.INFO,
         datefmt='%H:%M')
-    #plasmon_parameters = {
-    #        'Q0': 61, # N_k = 2*Q0+1 nanoparticles (123)
-    #        'NE': 4, # Number of emitters per gap
-    #        'w': 1, # Gap width, nm (Emitter spacing Delta_r = 2a+w = 81nm)
-    #        'a': 40, # Nanoparticle radius, nm (Chain length L = N_k * Delta_r = 10.0 nm)
-    #        'omega_p': 1.88, # Plasmon resonance, eV
-    #        'omega_0': 1.86, # Dye resonance, eV
-    #        'g': 0.095, # Individual light-matter coupling, eV (collective gSqrt(NE))
-    #        'kappa': 1e-01, # photon loss
-    #        'dephase': 0.0, # Emitter pure dephasing
-    #        'pump_strength': 1e-01, # Emitter pump magnitude
-    #        'pump_width': 500, # Emitter pump spot width, nm (approx. 6 nanoparticles)
-    #        'decay': 1e-01, # Emitter non-resonant decay
-    #        'Nnu': 2, # Number of vibrational levels for each emitter
-    #        'S': 0.01, # Huang-Rhys parameter
-    #        'omega_nu': 0.19, # Vibrational mode resonance, eV
-    #        'T':0.026, # k_B T in eV (.026=302K)
-    #        'gam_nu': 1e-03, # vibrational damping rate
-    #        'dt': 0.5, # interval at which solution is sampled. Does not affect accuracy of solution 
-    #        'model': 'plasmonic',
-    #        }
+    plasmon_parameters = {
+            'Q0': 61, # N_k = 2*Q0+1 nanoparticles (123)
+            'NE': 4, # Number of emitters per gap
+            'w': 1, # Gap width, nm (Emitter spacing Delta_r = 2a+w = 81nm)
+            'a': 40, # Nanoparticle radius, nm (Chain length L = N_k * Delta_r = 10.0 nm)
+            'omega_p': 1.88, # Plasmon resonance, eV
+            'omega_0': 1.86, # Dye resonance, eV
+            'g': 0.095, # Individual light-matter coupling, eV (collective gSqrt(NE))
+            't': 1.0, # 'Hopping' strength - only used to multiply current plot 
+            'kappa': 1e-01, # photon loss
+            'dephase': 0.0, # Emitter pure dephasing
+            'pump_strength': 1e-01, # Emitter pump magnitude
+            'pump_width': 500, # Emitter pump spot width, nm (approx. 6 nanoparticles)
+            'decay': 1e-01, # Emitter non-resonant decay
+            'Nnu': 1, # Number of vibrational levels for each emitter
+            'S': 0.01, # Huang-Rhys parameter
+            'omega_nu': 0.19, # Vibrational mode resonance, eV
+            'T':0.026, # k_B T in eV (.026=302K)
+            'gam_nu': 1e-03, # vibrational damping rate
+            'dt': 0.5, # interval at which solution is sampled. Does not affect accuracy of solution 
+            'model': 'plasmonic',
+            }
     tb_parameters = {
             'Q0': 25, # Chain of Nk = 2*Q0+1 = 51 sites
             'NE': 100, # Number of emitters per gap
@@ -1161,7 +1196,8 @@ if __name__ == '__main__':
             'dt': 0.5, # interval at which solution is sampled. Does not affect accuracy of solution 
             'model': 'tight-binding', # dispersion to use 
             }
-    pump_strengths = np.logspace(-3, 0.6, num=50) # set pump strength magnitudes for input-output curve
-    plot_input_output(tb_parameters, pump_strengths, tend=100) # all other parameters fixed
-    #plot_dynamics_and_final_state(tb_parameters) 
+    pump_strengths = np.logspace(-3, 0.6, num=20) # set pump strength magnitudes for input-output curve
+    #pump_strengths = np.logspace(-2, 2, num=5) # set pump strength magnitudes for input-output curve
+    #plot_input_output(plasmon_parameters, pump_strengths, tend=100) # all other parameters fixed
+    plot_dynamics_and_final_state(plasmon_parameters) 
 
