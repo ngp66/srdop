@@ -8,11 +8,13 @@ from opt_einsum import contract
 from time import time
 from pprint import pprint, pformat
 from copy import copy
+from scipy.signal import butter, filtfilt, lfilter, freqz, argrelextrema
+from scipy.optimize import curve_fit
+from scipy import constants
+from scipy.fft import fft, ifft, fftshift, ifftshift # recommended over numpy.fft
 from scipy.integrate import RK45
 SOLVER = RK45 # Runge-Kutta 4th order
 from mpmath import polylog
-from scipy import constants
-from scipy.fft import fft, ifft, fftshift, ifftshift # recommended over numpy.fft
 try:
     import pretty_traceback
     pretty_traceback.install()
@@ -66,6 +68,16 @@ class HTC:
     @classmethod
     def default_params(self):
         return copy(self.DEFAULT_PARAMS)
+
+    @classmethod
+    def butter_lowpass_filter(cls, data, cutoff, fs, order=5, axis=-1):
+        data = np.array(data)
+        b, a = butter(order, cutoff, fs=fs, btype='low')
+        padlen = 3 * max(len(a), len(b)) # default filtfilt padlength
+        if padlen >= data.shape[-1] - 1:#but must be less than data.shape[-1]-1
+            # https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.filtfilt.html#scipy.signal.filtfilt
+            padlen = max(0, data.shape[-1]-2) 
+        return filtfilt(b, a, data, axis=axis, padlen=padlen)
 
     def __init__(self, params=None):
         for name, dp in self.DEFAULT_DIRS.items():
@@ -539,6 +551,7 @@ class HTC:
         #g1s = np.zeros((Nt, self.Nk, self.Nk), dtype=complex)
         Vs = np.zeros((Nt, self.Q0+1), dtype=float)
         vpops = np.zeros((Nt, self.Nnu, self.Nk), dtype=float) # 2024-05-05 r_n index now last
+        ph_dic = self.blank_density_dic() # 2024-05-30
         #vpops = np.zeros((Nt, self.Nk, self.Nnu), dtype=float)
         self.dynamics = {'t': self.t_fs,
                          'r': self.rs, 
@@ -549,6 +562,7 @@ class HTC:
                          'g1': g1s,
                          'V': Vs, 
                          'vpop': vpops,
+                         'ph_dic':ph_dic,
                          }
 
     def blank_density_dic(self, dtype=float):
@@ -620,6 +634,19 @@ class HTC:
         self.dynamics['nK'][t_index] = np.real(nk)
         self.dynamics['g1'][t_index] = g1
         self.dynamics['V'][t_index] = V
+        # Moments for photon density dic
+        self.dynamics['ph_dic']['vals'][t_index] = np.real(nph)
+        self.calculate_moments('ph_dic', t_index)
+
+    def calculate_moments(self, name, t_index):
+        weights = np.abs(self.dynamics[name]['vals'][t_index])
+        if np.isclose(np.sum(weights), 0.0):
+            return 3 * [np.nan]
+        avg = lambda x: np.average(x, weights=weights)
+        mean = avg(self.ocoeffs['rn'])
+        self.dynamics[name]['mean'][t_index] = mean
+        self.dynamics[name]['var'][t_index] = avg(self.ocoeffs['rn2']) - mean**2
+        self.dynamics[name]['msd'][t_index] = avg(self.ocoeffs['msrn'])
 
     def calculate_electronic(self, t_index, l, ll):
         # N.B. we do not need to use the coefficients of the initial density
@@ -789,14 +816,18 @@ class HTC:
         ax3 = fig.add_subplot(gs[1, 0])
         ax4 = fig.add_subplot(gs[1, 1])
         fig.suptitle(r'Final $t={}$ fs'.format(self.dynamics['t'][-1]))
-        nP = self.dynamics['nP'][-1]
-        nM = self.dynamics['nM'][-1]
+        nP = np.copy(self.dynamics['nP'][-1])
+        nM = np.copy(self.dynamics['nM'][-1])
         if normalise:
             nP /= np.max(nP)
             nM /= np.max(nM)
-        ax1.plot(self.rs, nP, label=self.labels['Eph'])
-        ax1.plot(self.rs, nM, label=self.labels['EnM'])
-        ax1.set_xlabel(self.labels['rn'])
+        else:
+            nM /= self.NE
+        ax1.plot(self.ns, nP, label=self.labels['Eph'])
+        # Analytical calculation ignoring off-diagonal terms - not currently useful 
+        #n_analytic = self.n_profile()
+        #ax1.plot(self.ns, n_analytic, label=r'$n_{\text{\rm{ph}}}$ \rm{(analytic)}', ls='--')
+        #ax1.set_xlabel(self.labels['rn'])
         ax1.legend()
         final_vpops = self.dynamics['vpop'][-1]
         for i in range(self.Nnu):
@@ -822,8 +853,44 @@ class HTC:
         ax4.legend()
         fp = os.path.join(self.DEFAULT_DIRS['figures'], 'final_state.png')
         fig.savefig(fp, bbox_inches='tight', dpi=350)
-        logger.info(f'Final state plots saved to {fp}.')
         plt.close(fig)
+        fig2, ax2 = plt.subplots(figsize=(4,4), constrained_layout=True)
+        Sz = 2 * self.dynamics['nM'][-1]/self.params['NE'] - 1
+        Sa = self.S_steady()
+        ax2.plot(self.ns, Sz, label=r'$\langle \sigma^z_n \rangle$')
+        ax2.plot(self.ns, Sa, label=r'$\Gamma_\uparrow(n)/\Gamma_\downarrow$', ls='--')
+        #ax2.plot(self.ns, Sa, label=r'\rm{analytical}')
+        ax2.legend()
+        fp2 = os.path.join(self.DEFAULT_DIRS['figures'], 'polarisation.png')
+        fig2.savefig(fp2, dpi=350, bbox_inches='tight')
+        logger.info(f'Final state plots saved to {fp} and {fp2}.')
+        plt.close(fig2)
+
+    def fit_early(self, name, cutoff=0.01, early_i1=1, early_i2=None):
+        valid_i = 1 # ignore first datum
+        dense_dic = self.dynamics[name]
+        avgP, errorP, msdP = dense_dic['mean'], np.sqrt(dense_dic['var']), dense_dic['msd']
+        plot_tP = self.dynamics['t'][valid_i:]
+        fs = 1/(plot_tP[1]-plot_tP[0])
+        cutoffFS = cutoff * fs
+        msdP = self.butter_lowpass_filter(msdP[valid_i:], cutoffFS, fs)
+        to_plot = np.sqrt(msdP)
+        early_i1 -= valid_i 
+        def f(t, D, po):
+            return D * (t-plot_tP[early_i1])**po + to_plot[early_i1]
+        if early_i2 is None:
+            early_i2 = -1
+        else:
+            early_i2 -= valid_i
+        if len(plot_tP) > 10: # need reasonable number of points
+            popt, pcov = curve_fit(f, plot_tP[early_i1:early_i2],
+                                   to_plot[early_i1:early_i2], 
+                                   bounds=([0,0],[np.inf, 2]))
+            fit_data = f(plot_tP[early_i1:], *popt)
+            fit = [fit_data, popt]
+            return plot_tP, to_plot, fit
+        return plot_tP, to_plot, None
+        logger.warning('Too few data points to generate fit')
 
     def plot_dynamics(self):
         fig, axes = plt.subplots(2, 2, figsize=(8,8), constrained_layout=True)
@@ -856,10 +923,63 @@ class HTC:
         axes[1,0].set_xlabel(self.labels['t_fs'])
         axes[1,0].legend()
         self.plot_parameters(axes[1,1])
+        fig3, ax3 = plt.subplots(figsize=(4,4), constrained_layout=True)
+        #ax3.plot(smooth_t, smooth_msd, label=self.labels['Eph'])
+        cutoff = 0.01
+        cutoffFS = 0.01/self.EV_TO_FS
+        early_t = 20
+        rn_scale = 1e-3 # nm to mu.m
+        early_t1 = 0
+        early_t2 = 20
+        early_i1 = next((j for j, t in enumerate(t_fs) if t > 0), None)
+        early_i2 = next((j for j, t in enumerate(t_fs) if t > 20), None)
+        smooth_t, smooth_msd, fit = self.fit_early('ph_dic', cutoff, early_i1, early_i2)
+        ax3.plot(smooth_t, smooth_msd*rn_scale,
+                 label=r'\rm{{Lowpass (}}\({:.1g} \text{{\rm{{fs}}}}^{{-1}}\)\rm{{)}}'.format(cutoffFS))
+        popt = fit[1]
+        axes[0,0].plot(smooth_msd*rn_scale+self.rs[self.Q0], smooth_t, ls='--', color='lime')
+        ax3.plot(smooth_t[early_i1:early_i2], fit[0][early_i1:early_i2]*rn_scale, ls='--',
+                 label=r'\(D,\alpha=({:.2g},{:.2g})\)'.format(popt[0]*rn_scale, popt[1])\
+                         +'\n'+ r'\rm{{fit on ({},{})}}'.format(early_t1,early_t2))
+        #early_t1b = 20
+        #early_t2b = 60
+        #early_i1b = next((j for j, t in enumerate(t_fs) if t > early_t1b), None)
+        #early_i2b = next((j for j, t in enumerate(t_fs) if t > early_t2b), None)
+        #smooth_tb, smooth_msdb, fitb = self.fit_early('ph_dic', cutoff, early_i1b, early_i2b)
+        #poptb = fitb[1]
+        #ax3.plot(smooth_tb[early_i1b:early_i2b], fitb[0][:early_i2b-early_i1b]*rn_scale, ls='--',
+        #         label=r'\(D,\alpha=({:.2g},{:.2g})\)'.format(poptb[0]*rn_scale, poptb[1])\
+        #                 +'\n'+ r'\rm{{fit on ({},{})}}'.format(early_t1b,early_t2b))
+        ax3.set_title(r'\rm{RMSD[}'+self.labels['Eph']+r'\rm{] (}$\mu$\rm{m), fit} $Dt^\alpha$')
+        ax3.set_xlabel(self.labels['t_fs'])
+        ax3.legend()
         fp = os.path.join(self.DEFAULT_DIRS['figures'], 'dynamics.png')
         fig.savefig(fp, bbox_inches='tight', dpi=350)
-        logger.info(f'Dynamics plots saved to {fp}.')
         plt.close(fig)
+        fp3 = os.path.join(self.DEFAULT_DIRS['figures'], 'fit_dynamics.png')
+        fig3.savefig(fp3, bbox_inches='tight', dpi=350)
+        logger.info(f'Dynamics plots saved to {fp} and {fp3}.')
+        plt.close(fig3)
+        #fig2, ax2 = plt.subplots(figsize=(4,4), constrained_layout=True)
+        #ax2.set_xlabel(self.labels['t_fs'])
+        #ax2.set_ylabel(r'$\langle \sigma^z_n \rangle$', rotation=0)
+        #choseni = [self.Q0, self.Q0+5, self.Q0+10]
+        #for i in choseni:
+        #    szi = 2 * self.dynamics['nM'][:,i]/self.params['NE'] - 1
+        #    sai = self.S_decay(i, self.t)
+        #    p0 = ax2.plot(self.t_fs, szi, label=r'${}$'.format(i))
+        #    ax2.plot(self.t_fs, sai, ls='--', color='k')
+        #    #ax2.plot(self.t_fs, sai, ls='--', color=p0[0].get_color())
+        #ax2.legend(title=r'Site index')
+        #fp2 = os.path.join(self.DEFAULT_DIRS['figures'], 'decay_dynamics.png')
+        #fig2.savefig(fp2, bbox_inches='tight', dpi=350)
+        #logger.info(f'Dynamics plots saved to {fp} and {fp2}.')
+        #plt.close(fig2)
+
+    def S_decay(self, n, t):
+        GT = self.pump(n) + self.params['decay']
+        DG = GT - 2*self.params['decay']
+        return (1/GT) * (DG - 2 * self.pump(n) * np.exp(- GT * t))
 
     def plot_parameters(self, ax):
         params = self.params
@@ -877,6 +997,7 @@ class HTC:
              r'\(\omega_0={}\)'.format(params['omega_0']),
              r'\(g={:.3g}\)'.format(params['g']),
              r'\(g\sqrt{{N_E}}={:.3g}\)'.format(params['gSqrtNE']),
+             r'\(t={:.3g}\)'.format(params['t']),
             ]
         rate_params = \
             [
@@ -911,7 +1032,7 @@ class HTC:
                 ha='center', va='top', transform=ax.transAxes, size='medium')
         ax.text(0.75, 0.8, '\n'.join(rate_params),
                 ha='center', va='top', transform=ax.transAxes, size='medium')
-        ax.text(0.25, 0.5, '\n'.join(bath_params),
+        ax.text(0.25, 0.425, '\n'.join(bath_params),
                 ha='center', va='top', transform=ax.transAxes, size='medium')
 
     def plot_dispersion_and_pump(self):
@@ -944,7 +1065,41 @@ class HTC:
     def J(n_nm, t=1.0):
         J_R = 1j*t*np.concatenate(([n_nm[0,-1]], np.diag(n_nm, k=-1)))
         J_L = 1j*t*np.concatenate(([n_nm[-1,0]], np.diag(n_nm, k=+1)))
-        return J_R - J_L
+        return J_L, J_R
+
+    def S_steady(self):
+        params = self.params
+        if not np.isclose(params['dephase'], 0.0):
+            logger.critical('S solution for 0 pure dephasing only')
+            return np.zeros_like(self.ns)
+        GT = self.pump(self.ns) + params['decay']
+        DG = self.pump(self.ns) - params['decay']
+        k = params['kappa']
+        g = params['g']
+        NE = params['NE']
+        w0 = params['omega_0']
+        Gd = params['decay']
+        return DG/GT
+        #numer = GT * k * (8 * g**2 * w0 + 2 * Gd * ((GT+k)**2+4*w0**2))
+        #denom = 4 * g**2 * (2 * Gd * ( GT + k) * (NE * (GT-k) + k) - 2 * GT * k * w0)
+        #return numer/denom
+
+    def n_profile(self):
+        params = self.params
+        if not np.isclose(params['dephase'], 0.0) or not np.isclose(params['omega_0'],0.0):
+            logger.critical('n solution for 0 pure dephasing and on resonance')
+            return np.zeros_like(self.ns)
+        Gu = self.pump(self.ns)
+        Gd = params['decay']
+        GT = Gu + Gd
+        DG = Gu - Gd
+        kap = params['kappa']
+        g = params['g']
+        NE = params['NE']
+        numer = 4 * g**2 * NE * GT * Gu
+        denom = GT**2 * kap * (GT + kap) + 4 * DG * g**2 * (kap - NE * (GT + kap))
+        return numer/denom
+        
 
 def plot_input_output(parameters, pump_strengths, tend=100):
     # 2024-04-16
@@ -961,6 +1116,8 @@ def plot_input_output(parameters, pump_strengths, tend=100):
     adaga_final = np.zeros((num_pumps, Nk, Nk), dtype=complex) 
     n_nm_final = np.zeros((num_pumps, Nk, Nk), dtype=complex) 
     span_final = np.zeros((num_pumps, Nk), dtype=complex) 
+    JLs_final = np.zeros((num_pumps, Nk), dtype=complex)
+    JRs_final = np.zeros((num_pumps, Nk), dtype=complex)
     Js_final = np.zeros((num_pumps, Nk), dtype=complex)
     for i, pump in enumerate(pump_strengths):
         logger.info(f'On pump {i+1} of {num_pumps}')
@@ -974,7 +1131,8 @@ def plot_input_output(parameters, pump_strengths, tend=100):
         ada, l, al, ll = htc.split_reshape_return(results['final_state'],
                                                    check_rescaled=True) # final state variables
         n_nm_final[i, :, :] = fft(ifft(ada, axis=0), axis=1)
-        Js_final[i, :] = htc.J(n_nm_final[i,:,:])
+        JLs_final[i, :], JRs_final[i, :] = htc.J(n_nm_final[i,:,:])
+        Js_final[i, :] = JRs_final[i] - JLs_final[i]
         adaga_final[i, :, :] = ada #fftshift(ada)
         an_l = fft(al, axis=1) # index i, then k, then n ! (see EoMs). No normalisation (choice)
         #print(contract('imn,i->mn', htc.gp.basis[htc.gp.indices[1]], htc.ocoeffs['sp_l']))
@@ -1179,25 +1337,25 @@ if __name__ == '__main__':
             'a': 40, # Nanoparticle radius, nm (Chain length L = N_k * Delta_r = 10.0 nm) [not used in dynamics]
             'omega_p': 1.88, # Plasmon resonance, eV [not used in tight-binding model]
             #'omega_0': 1.86, # Dye resonance, eV 
-            'omega_0': 0.0, # Dye resonance, eV [0 for tight-binding model??]
+            'omega_0': 0.0, # Dye resonance, eV [0 initially for tight-binding model]
             't': 0.2, # hopping parameter, eV [not used in plasmonic model]
             'g': 0.01, # Individual light-matter coupling, eV, g=0.1/sqrt(NE) 
             'kappa': 0.1, # photon loss
             'dephase': 0.0, # Emitter pure dephasing
-            'pump_strength': 0.1, #  Magnitude of pump strength (changed in plot_input_output below)
+            'pump_strength': 0.001, #  Magnitude of pump strength (changed in plot_input_output below)
             #'pump_width': 324, # Pump spot width, nm (4 sites = 4 * Delta r = 4 * 81 = 324nm)
             'pump_width': 229, # Pump spot width, nm, to match JB Aexp{-((n-25)/4)^2} (see def gaussian above)
             'decay': 0.05, # Emitter non-resonant decay
             'Nnu': 1, # Number of vibrational levels for each emitter
-            'S': 0.0, # Huang-Rhys parameter [Not relevant if Nnu=1]
+            'S': 0.1, # Huang-Rhys parameter [Not relevant if Nnu=1]
             'omega_nu': 0.19, # Vibrational mode resonance, eV [N/A when Nnu=1]
             'T':0.026, # k_B T in eV for vibrational environment (.026=302K) [N/A when Nnu=1]
-            'gam_nu': 1e-03, # vibrational damping rate [N/A when Nnu=1]
+            'gam_nu': 1e-04, # vibrational damping rate [N/A when Nnu=1]
             'dt': 0.5, # interval at which solution is sampled. Does not affect accuracy of solution 
             'model': 'tight-binding', # dispersion to use 
             }
-    pump_strengths = np.logspace(-3, 0.6, num=20) # set pump strength magnitudes for input-output curve
-    #pump_strengths = np.logspace(-2, 2, num=5) # set pump strength magnitudes for input-output curve
-    #plot_input_output(plasmon_parameters, pump_strengths, tend=100) # all other parameters fixed
-    plot_dynamics_and_final_state(plasmon_parameters) 
+    #pump_strengths = np.logspace(-3, 0.6, num=20) # set pump strength magnitudes for input-output curve
+    pump_strengths = np.logspace(-2, 2, num=5) # set pump strength magnitudes for input-output curve
+    #plot_input_output(tb_parameters, pump_strengths, tend=100) # all other parameters fixed
+    plot_dynamics_and_final_state(tb_parameters) 
 
