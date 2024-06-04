@@ -926,7 +926,7 @@ class HTC:
         L = self.params['L']
         axes[0,0].set_xlim([None,L*1.0425])
         axes[0,0].set_xticks([0,L/4,L/2,3*L/4,L])
-        axes[0,0].set_xticklabels(['\(0\)','\(L/4\)','\(L/2\)','\(3L/4\)','\(L\)'])
+        axes[0,0].set_xticklabels([r'\(0\)', r'\(L/4\)', r'\(L/2\)', r'\(3L/4\)', r'\(L\)'])
         ax1in = axes[0,0].inset_axes([0.7,0.7,0.25,0.25])
         ax1in.plot(k1, w1, c='orange')
         ax1in.scatter(k2, w2, c='k', s=5, zorder=2)
@@ -1412,7 +1412,7 @@ class HTC:
         axes[0].set_ylabel(r'\(\sum_k n^k\)', rotation=0, labelpad=25)
         axes[1].set_ylabel(r'\(\langle \sigma_+ \sigma_- \rangle\)', rotation=0, labelpad=25)
         #axes[1].set_ylabel(r'\(\langle (\sigma_+ \sigma_-) \rangle_{L/2}\)', rotation=0, labelpad=60)
-        axes[1].set_xlabel('\(t\)')
+        axes[1].set_xlabel(r'\(t\)')
         label=r'\rm{C2}'
         ntots, p1s = self.calculate_dynamics_expectations(y)
         axes[0].plot(t, ntots, label=label)
@@ -1497,12 +1497,12 @@ if __name__ == '__main__':
             'dt': dt, # determines interval at which solution is evaluated. Does not effect the accuracy of solution, only the grid at which observables are recorded (if solver e.g. makes a step of 2*dt, interpolation is used to calculate inner points. 
             }
     htc = HTC(params)
-    htc.plot_dispersion()
-    htc.plot_hopfield()
+    #htc.plot_dispersion() # plot dispersion and sample points
+    #htc.plot_hopfield() # plot hopfield coefficients and polariton energies
     tf_fs = 100 # simulation time in fs
     htc.evolve(tf_fs=tf_fs)
-    results = htc.observables # contains values of observables at each step
-    htc.plot_all() # plotter functions used for transport problem
+    results = htc.observables # contains values of observables at each step, see htc.setup_observables_storage
+    #htc.plot_all() # plotter functions used for transport problem
     plt.close('all') # cleanup any open figures
     #htc.export_data() # export observables and parameters as dict to .pkl file
 
