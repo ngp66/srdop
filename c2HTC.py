@@ -927,18 +927,19 @@ class HTC:
         #ax3.plot(smooth_t, smooth_msd, label=self.labels['Eph'])
         cutoff = 0.01
         cutoffFS = 0.01/self.EV_TO_FS
-        early_t = 20
         rn_scale = 1e-3 # nm to mu.m
         early_t1 = 0
         early_t2 = 20
-        early_i1 = next((j for j, t in enumerate(t_fs) if t > 0), None)
-        early_i2 = next((j for j, t in enumerate(t_fs) if t > 20), None)
+        early_i1 = next((j for j, t in enumerate(t_fs) if t > early_t1), None)
+        early_i2 = next((j for j, t in enumerate(t_fs) if t > early_t2), None)
         smooth_t, smooth_msd, fit = self.fit_early('ph_dic', cutoff, early_i1, early_i2)
         ax3.plot(smooth_t, smooth_msd*rn_scale,
                  label=r'\rm{{Lowpass (}}\({:.1g} \text{{\rm{{fs}}}}^{{-1}}\)\rm{{)}}'.format(cutoffFS))
         popt = fit[1]
         axes[0,0].plot(smooth_msd*rn_scale+self.rs[self.Q0], smooth_t, ls='--', color='lime')
-        ax3.plot(smooth_t[early_i1:early_i2], fit[0][early_i1:early_i2]*rn_scale, ls='--',
+        offset = max(0, early_i1-1)
+        end = offset + early_i2-early_i1
+        ax3.plot(smooth_t[offset:end], fit[0][:early_i2-early_i1]*rn_scale, ls='--',
                  label=r'\(D,\alpha=({:.2g},{:.2g})\)'.format(popt[0]*rn_scale, popt[1])\
                          +'\n'+ r'\rm{{fit on ({},{})}}'.format(early_t1,early_t2))
         #early_t1b = 20
@@ -950,7 +951,8 @@ class HTC:
         #ax3.plot(smooth_tb[early_i1b:early_i2b], fitb[0][:early_i2b-early_i1b]*rn_scale, ls='--',
         #         label=r'\(D,\alpha=({:.2g},{:.2g})\)'.format(poptb[0]*rn_scale, poptb[1])\
         #                 +'\n'+ r'\rm{{fit on ({},{})}}'.format(early_t1b,early_t2b))
-        ax3.set_title(r'\rm{RMSD[}'+self.labels['Eph']+r'\rm{] (}$\mu$\rm{m), fit} $Dt^\alpha$')
+        #ax3.set_title(r'\rm{RMSD[}'+self.labels['Eph']+r'\rm{] (}$\mu$\rm{m), fit} $Dt^\alpha$')
+        ax3.set_title(r'$t={}\quad \kappa={}$'.format(self.params['t'], self.params['kappa']))
         ax3.set_xlabel(self.labels['t_fs'])
         ax3.legend()
         fp = os.path.join(self.DEFAULT_DIRS['figures'], 'dynamics.png')
