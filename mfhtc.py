@@ -46,6 +46,7 @@ class HTC:
     DEFAULT_DIRS = {'data':'./data', 'figures':'./figures'} # output directories
     # N.B. type of parameters used to parse (non-default) input parameters
     DEFAULT_PARAMS = {
+            'NE': 5 # molecules per ensemble
             'Q0': 15, # how many modes either side of K0 (or 0 for populations) to include; 2*Q0+1 modes total 
             'Nm': 6001, # Number of molecules
             'Nnu':1, # Number of vibrational levels for each molecules
@@ -329,8 +330,8 @@ class HTC:
         a0.append(alpha_k*self.coeffs['X_k']) # expectation values of initial a_k (not rescaled)
         for n in range(self.Nk):
             beta_n = fft(-alpha_k*self.coeffs['Y_k'], axis=0, norm='ortho')[n]  #is the norm truly ortho here? or stick to previous convention?
-            beta_n *= np.sqrt(self.Nm) # is the normalisation correct? Nm rather than Nk
-            U_n = expm(np.array([[0, beta_n],[np.conj(beta_n), 0]]))
+            beta_n *= np.sqrt(self.NE) # is the normalisation correct? Nm rather than Nk
+            U_n = expm(np.array([[0, beta_n],[-np.conj(beta_n), 0]]))
             U_n_dag = U_n.conj().T 
             exciton_matrix_n = U_n @ TLS_matrix @ U_n_dag # initial exciton matrix
             rho0n = np.kron(exciton_matrix_n, rho0_vib) # total density operator
@@ -340,7 +341,7 @@ class HTC:
             l00.append(coeffs00)
         # flatten and concatenate to match input state structure of RK (1d array)
         state = np.concatenate((a0, lp0, l00), axis=None)
-        assert np.allclose(len(state) - self.state_length, 0.0), 'Initial state does not match the required dimensions'
+        assert len(state) == self.state_length, 'Initial state does not match the required dimensions'
         return state
 
     def split_reshape_return(self, state, check_rescaled=False, copy=False):
@@ -379,10 +380,11 @@ class HTC:
         """Integrates the equations of motion from t = 0 to tf using solve_ivp."""
         in_state = self.initial_state().real
         ivp = solve_ivp(self.eoms, [0,tf], in_state, dense_output=True)
-        last_t_index = len(ivp.t)
-        state_f = []
-        for i in range(self.state_length):
-            state_f.append(ivp.y[i][last_t_index-1])
+        state_f = ivp.y[:,-1]
+        #last_t_index = len(ivp.t)
+        #state_f = []
+        #for i in range(self.state_length):
+        #    state_f.append(ivp.y[i][last_t_index-1])
         a_f, lp_f, l0_f = self.split_reshape_return(state_f) 
         return a_f, lp_f, l0_f
 
@@ -393,6 +395,7 @@ if __name__ == '__main__':
         level=logging.INFO,
         datefmt='%H:%M')
     params = {
+        'NE': 5 # molecules per ensemble
         'Q0': 2, # how many modes either side of K0 (or 0 for populations) to include; 2*Q0+1 modes total 
         'Nm': 4, # Number of molecules
         'Nnu': 2, # Number of vibrational levels for each molecules
