@@ -381,10 +381,6 @@ class HTC:
         in_state = self.initial_state().real
         ivp = solve_ivp(self.eoms, [0,tf], in_state, dense_output=True)
         state_f = ivp.y[:,-1]
-        #last_t_index = len(ivp.t)
-        #state_f = []
-        #for i in range(self.state_length):
-        #    state_f.append(ivp.y[i][last_t_index-1])
         a_f, lp_f, l0_f = self.split_reshape_return(state_f) 
         return a_f, lp_f, l0_f
 
