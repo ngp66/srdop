@@ -265,6 +265,8 @@ class HTC:
         consts['kappa'] = self.kappa(shifted_Ks)
         consts['omega'] = self.omega(shifted_Ks)
         consts['zetap'] = gp.get_coefficients(np.kron(sp, bi), sgn=1, eye=False)
+        consts['zzetazeta' = contract('i,j,a->a', self.consts['zetap'],
+                             self.consts['zetap'], z011)
         # CIJ means Jth coeff. of Ith eqn.
         # Written in terms of rescaled a: a_tilda = a / sqrt(Nm)
         # EQ 1 
@@ -390,6 +392,7 @@ class HTC:
         self.calculate_observables(state_f)
         return a_f, lp_f, l0_f
 
+
     def calculate_observables(self, state):
         """Calculate polariton, photon and molecular numbers for a given state.""" 
         gp = self.gp
@@ -408,7 +411,7 @@ class HTC:
         sig_plus = contract('i,in->n', self.consts['zetap'], lp)
         sig_abs_sq = sig_plus * sig_plus.conj()
         sigsig_k2 = ifft(sig_abs_sq, axis=0, norm='backward')
-        pre_l0 = contract('i,j,aij,an->n', self.consts['zetap'], self.consts['zetap'], z011, l0)
+        pre_l0 = contract('a,an->n', self.consts['zzetazeta'], l0)
         post_l0 = fft(pre_l0, axis = 0, norm = 'backward')
         #np.fromfunction() # for loops
         sigsig = np.zeros((self.Nk, self.Nk), dtype=complex)
