@@ -417,8 +417,10 @@ class HTC:
         delta_k = np.eye(self.Nk)
         for p, k in itertools.product(range(self.Nk), range(self.Nk)): # polariton expectation value <L_k'+, L_k>
             sigsig[p, k] = sigsig_k1[p, k] - sigsig_k2[k-p] + post_l0[k-p] + (0.5/self.Nnu) * delta_k[k,p]
-            n_L[p, k] = self.coeffs['X_k'][p] * self.coeffs['X_k'][k] * n_k[p, k] + self.coeffs['Y_k'][p] * self.coeffs['Y_k'][k] * sigsig[p, k] \
-            - self.coeffs['X_k'][p] * self.coeffs['Y_k'][k] * np.conj(asig_k[p,k]) - self.coeffs['Y_k'][p] * self.coeffs['X_k'][k] * asig_k[p, k]
+            n_L[p, k] = self.coeffs['X_k'][p] * self.coeffs['X_k'][k] * n_k[p, k] \
+            + self.coeffs['Y_k'][p] * self.coeffs['Y_k'][k] * sigsig[p, k] \
+            - self.coeffs['X_k'][p] * self.coeffs['Y_k'][k] * np.conj(asig_k[p,k]) \
+            - self.coeffs['Y_k'][p] * self.coeffs['X_k'][k] * asig_k[p, k]
         return n_k, n_L
 
     def plot_n_L(self, tf):
