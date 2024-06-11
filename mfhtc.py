@@ -46,7 +46,7 @@ class HTC:
     DEFAULT_DIRS = {'data':'./data', 'figures':'./figures'} # output directories
     # N.B. type of parameters used to parse (non-default) input parameters
     DEFAULT_PARAMS = {
-            'NE': 5 # molecules per ensemble
+            'NE': 5, # molecules per ensemble
             'Q0': 15, # how many modes either side of K0 (or 0 for populations) to include; 2*Q0+1 modes total 
             'Nm': 6001, # Number of molecules
             'Nnu':1, # Number of vibrational levels for each molecules
@@ -264,6 +264,7 @@ class HTC:
         shifted_Ks = np.fft.ifftshift(self.Ks) # ALL COMPUTATIONS DONE WITH numpy order of modes
         consts['kappa'] = self.kappa(shifted_Ks)
         consts['omega'] = self.omega(shifted_Ks)
+        consts['zetap'] = gp.get_coefficients(np.kron(sp, bi), sgn=1, eye=False)
         # CIJ means Jth coeff. of Ith eqn.
         # Written in terms of rescaled a: a_tilda = a / sqrt(Nm)
         # EQ 1 
@@ -363,7 +364,7 @@ class HTC:
         a, lp, l0 = self.split_reshape_return(state) 
         a /= np.sqrt(self.Nm) # rescale initial state (a -> a-tilda)
         # Calculate DFT
-        alpha = fft(a, axis=0)  
+        alpha = np.conj(ifft(np.conj(a), axis=0)) 
         # EQ 1 
         pre_c = contract('i,in->n', C['12_1'], lp)   
         post_c = fft(pre_c, axis=0, norm='forward')
@@ -381,9 +382,36 @@ class HTC:
         in_state = self.initial_state().real
         ivp = solve_ivp(self.eoms, [0,tf], in_state, dense_output=True)
         state_f = ivp.y[:,-1]
+        #last_t_index = len(ivp.t)
+        #state_f = []
+        #for i in range(self.state_length):
+        #    state_f.append(ivp.y[i][last_t_index-1])
         a_f, lp_f, l0_f = self.split_reshape_return(state_f) 
         return a_f, lp_f, l0_f
 
+    def calculate_observables(self, state):
+        """Calculate polariton, photon and molecular numbers for a given state.""" 
+        gp = self.gp
+        a, lp, l0 = self.split_reshape_return(state) 
+        z011 = gp.z_tensor((0,1,1))
+        sNm = np.sqrt(self.Nm)
+        n_k = np.outer(np.conj(a),a)*self.Nm # photon number; includes rescaling
+        pre_zlp = contract('i,in->n', self.consts['zetap'], lp)
+        post_zlp = fft(pre_zlp, axis = 0, norm = 'ortho')
+        asig_k = np.outer(a, post_zlp)*sNm # expectation value <a_k sigma_k'+>
+        #post_lp = fft(pre_zlp, axis = 0, norm = 'ortho')
+        #print(np.shape(np.outer(lp, np.conj(lp))))
+        #pre_zzlp = contract('i,j,ijnn->nn', self.consts['zetap'], self.consts['zetap'], np.outer(lp, np.conj(lp)))
+        #post_zzlp = fft(pre_zzlp, axis = 0, norm = 'ortho')
+        sigsig_k1 = np.outer(post_zlp, np.conj(post_zlp))*(self.NE-1)
+        #print(np.shape(post_zzlp))
+        pre_l0 = contract('i,j,aij,an->n', self.consts['zetap'], self.consts['zetap'], z011, l0)
+        post_l0 = fft(pre_l0, axis = 0, norm = 'backward')
+        print(np.shape(post_l0))
+        #pre_sigsig_k = sigsig_k1 - post_lp/sNm + post_l0
+        #sigsig_k = contract('i,j,ij-> ', self.consts['zetap'], self.consts['zetap'], sigsig_k1)
+        #print(np.shape(sigsig_k))
+        #print(sigsig_k) 
 
 if __name__ == '__main__':
     logging.basicConfig(
@@ -391,7 +419,7 @@ if __name__ == '__main__':
         level=logging.INFO,
         datefmt='%H:%M')
     params = {
-        'NE': 5 # molecules per ensemble
+        'NE': 5, # molecules per ensemble
         'Q0': 2, # how many modes either side of K0 (or 0 for populations) to include; 2*Q0+1 modes total 
         'Nm': 4, # Number of molecules
         'Nnu': 2, # Number of vibrational levels for each molecules
