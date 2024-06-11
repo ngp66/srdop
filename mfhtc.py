@@ -379,7 +379,7 @@ class HTC:
 
     def quick_integration(self, tf):
         """Integrates the equations of motion from t = 0 to tf using solve_ivp."""
-        in_state = self.initial_state().real
+        in_state = self.initial_state()
         ivp = solve_ivp(self.eoms, [0,tf], in_state, dense_output=True)
         state_f = ivp.y[:,-1]
         #last_t_index = len(ivp.t)
@@ -387,6 +387,7 @@ class HTC:
         #for i in range(self.state_length):
         #    state_f.append(ivp.y[i][last_t_index-1])
         a_f, lp_f, l0_f = self.split_reshape_return(state_f) 
+        self.calculate_observables(state_f)
         return a_f, lp_f, l0_f
 
     def calculate_observables(self, state):
@@ -403,11 +404,21 @@ class HTC:
         #print(np.shape(np.outer(lp, np.conj(lp))))
         #pre_zzlp = contract('i,j,ijnn->nn', self.consts['zetap'], self.consts['zetap'], np.outer(lp, np.conj(lp)))
         #post_zzlp = fft(pre_zzlp, axis = 0, norm = 'ortho')
-        sigsig_k1 = np.outer(post_zlp, np.conj(post_zlp))*(self.NE-1)
-        #print(np.shape(post_zzlp))
+        sigsig_k1 = np.outer(post_zlp, np.conj(post_zlp))*self.NE
+        sig_plus = contract('i,in->n', self.consts['zetap'], lp)
+        sig_abs_sq = sig_plus * sig_plus.conj()
+        sigsig_k2 = ifft(sig_abs_sq, axis=0, norm='backward')
         pre_l0 = contract('i,j,aij,an->n', self.consts['zetap'], self.consts['zetap'], z011, l0)
         post_l0 = fft(pre_l0, axis = 0, norm = 'backward')
-        print(np.shape(post_l0))
+        #np.fromfunction() # for loops
+        sigsig = np.zeros((self.Nk, self.Nk), dtype=complex)
+        #for p in range(self.Nk):
+            #for k in range(self.Nk):
+        delta_k = np.eye(self.Nk)
+        for p, k in itertools.product(range(self.Nk), range(self.Nk)):
+            sigsig[p, k] = sigsig_k1[p, k] - sigsig_k2[k-p] + post_l0[k-p] + (0.5/self.Nnu) * delta_k[k,p]
+        #print(np.shape(post_zzlp))
+        #print(np.shape(post_l0))
         #pre_sigsig_k = sigsig_k1 - post_lp/sNm + post_l0
         #sigsig_k = contract('i,j,ij-> ', self.consts['zetap'], self.consts['zetap'], sigsig_k1)
         #print(np.shape(sigsig_k))
