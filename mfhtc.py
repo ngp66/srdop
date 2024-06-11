@@ -46,7 +46,6 @@ class HTC:
     DEFAULT_DIRS = {'data':'./data', 'figures':'./figures'} # output directories
     # N.B. type of parameters used to parse (non-default) input parameters
     DEFAULT_PARAMS = {
-            'NE': 5, # molecules per ensemble
             'Q0': 15, # how many modes either side of K0 (or 0 for populations) to include; 2*Q0+1 modes total 
             'Nm': 6001, # Number of molecules
             'Nnu':1, # Number of vibrational levels for each molecules
@@ -144,7 +143,8 @@ class HTC:
         self.params['delta'] = round(params['epsilon'] - self.wc, 5) # detuning
         self.off_diag_indices_Nk = np.where(~np.eye(self.Nk,dtype=bool))
         self.diag_indices_Nk = np.diag_indices(self.Nk)
-
+        self.params['NE'] = self.Nm / self.Nk
+        
     def get_rates(self, params):
         rates = {}
         for name, val in params.items():
@@ -390,13 +390,12 @@ class HTC:
         return n_ki, n_Li
 
     def calculate_n_photon(self, state):
-        """Calculate photon populations for a given state.""" 
         a, lp, l0 = self.split_reshape_return(state) 
         n_k = np.outer(np.conj(a),a)*self.Nm # photon number; includes rescaling
         return n_k
         
     def calculate_observables(self, state):
-        """Calculate polariton and photon populations for a given state.""" 
+        """Calculate polariton, photon and molecular numbers for a given state.""" 
         gp = self.gp
         a, lp, l0 = self.split_reshape_return(state) 
         z011 = gp.z_tensor((0,1,1))
@@ -405,7 +404,7 @@ class HTC:
         pre_zlp = contract('i,in->n', self.consts['zetap'], lp)
         post_zlp = fft(pre_zlp, axis = 0, norm = 'ortho')
         asig_k = np.outer(a, post_zlp)*sNm # expectation value <a_k sigma_k'+>
-        sigsig_k1 = np.outer(post_zlp, np.conj(post_zlp))*self.NE # first term of <sig_k'+, sig_k->
+        sigsig_k1 = np.outer(post_zlp, np.conj(post_zlp))*self.params['NE'] # first term of <sig_k'+, sig_k->
         sig_plus = contract('i,in->n', self.consts['zetap'], lp)
         sig_abs_sq = sig_plus * sig_plus.conj()
         sigsig_k2 = ifft(sig_abs_sq, axis=0, norm='backward')
@@ -413,17 +412,16 @@ class HTC:
         post_l0 = fft(pre_l0, axis = 0, norm = 'backward')
         sigsig = np.zeros((self.Nk, self.Nk), dtype=complex)
         n_L = np.zeros((self.Nk, self.Nk), dtype=complex)
+        #for p in range(self.Nk):
+            #for k in range(self.Nk):
         delta_k = np.eye(self.Nk)
         for p, k in itertools.product(range(self.Nk), range(self.Nk)): # polariton expectation value <L_k'+, L_k>
             sigsig[p, k] = sigsig_k1[p, k] - sigsig_k2[k-p] + post_l0[k-p] + (0.5/self.Nnu) * delta_k[k,p]
-            n_L[p, k] = self.coeffs['X_k'][p] * self.coeffs['X_k'][k] * n_k[p, k] \
-            + self.coeffs['Y_k'][p] * self.coeffs['Y_k'][k] * sigsig[p, k] \
-            - self.coeffs['X_k'][p] * self.coeffs['Y_k'][k] * np.conj(asig_k[p,k]) \
-            - self.coeffs['Y_k'][p] * self.coeffs['X_k'][k] * asig_k[p, k]
+            n_L[p, k] = self.coeffs['X_k'][p] * self.coeffs['X_k'][k] * n_k[p, k] + self.coeffs['Y_k'][p] * self.coeffs['Y_k'][k] * sigsig[p, k] \
+            - self.coeffs['X_k'][p] * self.coeffs['Y_k'][k] * np.conj(asig_k[p,k]) - self.coeffs['Y_k'][p] * self.coeffs['X_k'][k] * asig_k[p, k]
         return n_k, n_L
 
     def plot_n_L(self, tf):
-        """Plot initial polariton population for a given state."""
         n_k, n_L = self.quick_integration(tf)
         assert np.allclose(np.diag(n_L).imag, 0.0), "Polariton population has imaginary components"
         n_L_diag = fftshift(np.diag(n_L).real) # shift back so that 0 is at the center
@@ -433,7 +431,7 @@ class HTC:
         ax.set_xlabel('$k$')
         ax.set_ylabel('$n_L(k)$')
         ax.set_title('Initial Polariton Population')
-        #plt.savefig(fname = 'state_i.jpg', format = 'jpg')
+        plt.savefig(fname = 'state_i.jpg', format = 'jpg')
         
 if __name__ == '__main__':
     logging.basicConfig(
@@ -441,7 +439,6 @@ if __name__ == '__main__':
         level=logging.INFO,
         datefmt='%H:%M')
     params = {
-        'NE': 5, # molecules per ensemble
         'Q0': 15, # how many modes either side of K0 (or 0 for populations) to include; 2*Q0+1 modes total 
         'Nm': 6000, # Number of molecules
         'Nnu': 1, # Number of vibrational levels for each molecules
