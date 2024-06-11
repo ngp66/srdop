@@ -434,7 +434,7 @@ class HTC:
         ax.plot(self.Ks, n_L_diag)
         ax.set_xlabel('$k$')
         ax.set_ylabel('$n_L(k)$')
-        ax.set_title('Initial Polariton State')
+        ax.set_title('Initial Polariton Population')
         #plt.savefig(fname = 'state_i.jpg', format = 'jpg')
         
 if __name__ == '__main__':
