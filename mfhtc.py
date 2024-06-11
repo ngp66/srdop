@@ -390,12 +390,13 @@ class HTC:
         return n_ki, n_Li
 
     def calculate_n_photon(self, state):
+        """Calculate photon populations for a given state.""" 
         a, lp, l0 = self.split_reshape_return(state) 
         n_k = np.outer(np.conj(a),a)*self.Nm # photon number; includes rescaling
         return n_k
         
     def calculate_observables(self, state):
-        """Calculate polariton, photon and molecular numbers for a given state.""" 
+        """Calculate polariton and photon populations for a given state.""" 
         gp = self.gp
         a, lp, l0 = self.split_reshape_return(state) 
         z011 = gp.z_tensor((0,1,1))
@@ -412,8 +413,6 @@ class HTC:
         post_l0 = fft(pre_l0, axis = 0, norm = 'backward')
         sigsig = np.zeros((self.Nk, self.Nk), dtype=complex)
         n_L = np.zeros((self.Nk, self.Nk), dtype=complex)
-        #for p in range(self.Nk):
-            #for k in range(self.Nk):
         delta_k = np.eye(self.Nk)
         for p, k in itertools.product(range(self.Nk), range(self.Nk)): # polariton expectation value <L_k'+, L_k>
             sigsig[p, k] = sigsig_k1[p, k] - sigsig_k2[k-p] + post_l0[k-p] + (0.5/self.Nnu) * delta_k[k,p]
@@ -424,9 +423,8 @@ class HTC:
         return n_k, n_L
 
     def plot_n_L(self, tf):
+        """Plot initial polariton population for a given state."""
         n_k, n_L = self.quick_integration(tf)
-        #n_L_diag = np.diag(n_L.real)
-        #print(n_L)
         assert np.allclose(np.diag(n_L).imag, 0.0), "Polariton population has imaginary components"
         n_L_diag = fftshift(np.diag(n_L).real) # shift back so that 0 is at the center
         fig, ax = plt.subplots(1,1,figsize = (10,4))
