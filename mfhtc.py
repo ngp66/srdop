@@ -427,58 +427,72 @@ class HTC:
         n_k = self.calculate_n_photon(state) # photonic population; includes rescaling
         n_M = self.calculate_n_molecular(state, kspace) # molecular population
         n_B = self.calculate_n_bright(state) # bright state population
-        pre_zlp = contract('i,in->n', self.consts['zetap'], lp)
-        post_zlp = fft(pre_zlp, axis = 0, norm = 'ortho')
-        asig_k = np.outer(a, post_zlp)*sNm # expectation value <a_k sigma_k'+>
-        sigsig_k1 = np.outer(post_zlp, np.conj(post_zlp))*self.params['NE'] # first term of <sig_k'+, sig_k->
-        sig_plus = contract('i,in->n', self.consts['zetap'], lp)
-        sig_abs_sq = sig_plus * sig_plus.conj()
-        sigsig_k2 = ifft(sig_abs_sq, axis=0, norm='backward')
-        pre_l0 = contract('a,an->n', self.consts['zetazeta'], l0)
-        post_l0 = fft(pre_l0, axis = 0, norm = 'backward')
-        sigsig = np.zeros((self.Nk, self.Nk), dtype=complex)
-        n_L = np.zeros((self.Nk, self.Nk), dtype=complex)
-        n_U = np.zeros((self.Nk, self.Nk), dtype=complex)
-        delta_k = np.eye(self.Nk)
-        for p, k in itertools.product(range(self.Nk), range(self.Nk)): # polariton population
+        sig_plus = contract('i,in->n', self.consts['zetap'], lp)  # zeta(i+)<lambda(i+)>
+        post_sigp = fft(sig_plus, axis = 0, norm = 'ortho') # (in k-space, negative exponents)
+        asig_k = np.outer(a, post_sigp)*sNm # expectation value <a_k sigma(k'+)>; includes rescaling
+        sigsig_k1 = np.outer(post_sigp, np.conj(post_sigp))*self.params['NE'] # first term of <sigma(k'+)sigma(k-)>
+        sig_abs_sq = sig_plus * sig_plus.conj()  # zeta(i+)zeta(j+)<lambda(i+)><lambda(j-)>
+        sigsig_k2 = ifft(sig_abs_sq, axis=0, norm='backward') # (in k-space, positive exponents)
+        pre_l0 = contract('a,an->n', self.consts['zetazeta'], l0) # zeta(i+)zeta(j+)Z+(i0i+j+)<lambda(i0)> (in real space)
+        post_l0 = ifft(pre_l0, axis = 0, norm = 'backward') # (in k-space, positive exponents)
+        sigsig = np.zeros((self.Nk, self.Nk), dtype=complex) # initialise array for <sigma(k'+)sigma(k-)> values
+        n_L = np.zeros((self.Nk, self.Nk), dtype=complex) # initialise array for lower polariton population values
+        n_U = np.zeros((self.Nk, self.Nk), dtype=complex) # initialise array for upper polariton population values
+        delta_k = np.eye(self.Nk) # equivalent to zeta(i+)zeta(j+)delta(i+,j+)
+        for p, k in itertools.product(range(self.Nk), range(self.Nk)): 
             sigsig[p, k] = sigsig_k1[p, k] - sigsig_k2[k-p] + post_l0[k-p] + (0.5/self.Nnu) * delta_k[k,p]
-            n_L[p, k] = self.coeffs['X_k'][p] * self.coeffs['X_k'][k] * n_k[p, k] + self.coeffs['Y_k'][p] * self.coeffs['Y_k'][k] * sigsig[p, k] \
-            - self.coeffs['X_k'][p] * self.coeffs['Y_k'][k] * np.conj(asig_k[p,k]) - self.coeffs['Y_k'][p] * self.coeffs['X_k'][k] * asig_k[k, p]
-            n_U[p,k] = self.coeffs['X_k'][p] * self.coeffs['X_k'][k] * sigsig[p, k] + self.coeffs['Y_k'][p] * self.coeffs['Y_k'][k] * n_k[p, k] \
-            + self.coeffs['X_k'][p] * self.coeffs['Y_k'][k] * asig_k[k,p] + self.coeffs['Y_k'][p] * self.coeffs['X_k'][k] * np.conj(asig_k[p,k])
+            n_U[p,k] = self.coeffs['X_k'][p] * self.coeffs['X_k'][k] * sigsig[p, k] \ # calculate upper polariton population
+            + self.coeffs['Y_k'][p] * self.coeffs['Y_k'][k] * n_k[p, k] \
+            + self.coeffs['X_k'][p] * self.coeffs['Y_k'][k] * asig_k[k,p] \
+            + self.coeffs['Y_k'][p] * self.coeffs['X_k'][k] * np.conj(asig_k[p,k])
+            n_L[p, k] = self.coeffs['X_k'][p] * self.coeffs['X_k'][k] * n_k[p, k] \ # calculate lower polariton population
+            + self.coeffs['Y_k'][p] * self.coeffs['Y_k'][k] * sigsig[p, k] \
+            - self.coeffs['X_k'][p] * self.coeffs['Y_k'][k] * np.conj(asig_k[p,k]) \
+            - self.coeffs['Y_k'][p] * self.coeffs['X_k'][k] * asig_k[k, p]
         return n_k, n_M, n_L, n_U, sigsig, asig_k, n_B
 
-    def plot_n_L(self, tf, kspace = False):
+    def plot_n_L(self, tf, kspace = False, savefig = False):
         n_k, n_M, n_L, n_U, sigsig, asig_k, n_B = self.quick_integration(tf, kspace)
-        #print(asig_k)
-        #assert np.allclose(n_M + np.diag(n_k).real - np.diag(n_L).real, 0.0), "Polariton population not equal to sum of molecular and photon populations"
-        assert np.allclose(np.diag(n_M).imag, 0.0), "Polariton population has imaginary components"
+        #print(n_U)
+        #assert np.allclose(n_M.real + np.diag(n_k).real - np.diag(n_L).real, 0.0), "Polariton population not equal to sum of molecular and photon populations"
+        assert np.allclose(np.diag(n_M).imag, 0.0), "Molecular population has imaginary components"
         assert np.allclose(np.diag(n_k).imag, 0.0), "Photon population has imaginary components"
-        assert np.allclose(np.diag(n_L).imag, 0.0), "Molecular population has imaginary components"
+        assert np.allclose(np.diag(n_L).imag, 0.0), "Lower polariton population has imaginary components"
+        assert np.allclose(np.diag(n_U).imag, 0.0), "Upper polariton population has imaginary components"
         assert np.allclose(np.diag(sigsig).imag, 0.0), "The coherences have imaginary components"
-        n_L_diag = fftshift(np.diag(n_L).real) # shift back so that k=0 is at the center
-        n_k_diag = fftshift(np.diag(n_k).real)
+        n_U_diag = fftshift(np.diag(n_U).real) # shift back so that k=0 component is at the center
+        n_L_diag = fftshift(np.diag(n_L).real) # shift back so that k=0 component is at the center
+        n_k_diag = fftshift(np.diag(n_k).real) # shift back so that k=0 component is at the center
         #n_M = fftshift(n_M.real)
-        sigsig_diag = fftshift(np.diag(sigsig).real)
+        sigsig_diag = fftshift(np.diag(sigsig).real) 
         asig_k_diag = fftshift(np.diag(asig_k).real)
-        fig, ax = plt.subplots(4,1,figsize = (12,8),sharex = True)
-        ax[0].scatter(self.Ks, n_L_diag, marker = '.')
-        ax[0].plot(self.Ks, n_L_diag)
-        ax[0].set_ylabel('$n_L(k)$')
-        ax[1].scatter(self.Ks, n_k_diag, marker = '.')
-        ax[1].plot(self.Ks, n_k_diag)
-        ax[1].set_ylabel('$n_k(k)$')
-        ax[2].scatter(self.Ks, sigsig_diag, marker = '.')
-        ax[2].plot(self.Ks, sigsig_diag)
-        ax[2].set_xlabel('$k$')
-        ax[2].set_ylabel('$< \sigma_{k\prime}^{+} \sigma_k^{-}>$')
-        ax[3].scatter(self.Ks, asig_k_diag, marker = '.')
-        ax[3].plot(self.Ks, asig_k_diag)
-        ax[3].set_xlabel('$k$')
-        ax[3].set_ylabel('$< a_{k\prime}^{+} \sigma_k^{+}>$')
-        fig.suptitle('Initial Populations in k-space')
-        fig.tight_layout(h_pad=0.2)
-        plt.savefig(fname = 'state_i.jpg', format = 'jpg')
+        fig1, ax1 = plt.subplots(2,1,figsize = (12,4),sharex = True)
+        ax1[0].scatter(self.Ks, n_U_diag, marker = '.')
+        ax1[0].plot(self.Ks, n_U_diag)
+        ax1[0].set_ylabel('$n_U(k)$')
+        ax1[1].scatter(self.Ks, n_L_diag, marker = '.')
+        ax1[1].plot(self.Ks, n_L_diag)
+        ax1[1].set_ylabel('$n_L(k)$')
+        ax1[1].set_xlabel('$k$')
+        fig1.suptitle('Upper and Lower Polariton Populations in k-space')
+        fig1.tight_layout(h_pad=0.2)
+        if savefig:
+            plt.savefig(fname = 'ULpolaritons.jpg', format = 'jpg')
+        fig2, ax2 = plt.subplots(3,1,figsize = (12,6),sharex = True)        
+        ax2[0].scatter(self.Ks, n_k_diag, marker = '.')
+        ax2[0].plot(self.Ks, n_k_diag)
+        ax2[0].set_ylabel('$n_k(k)$')
+        ax2[1].scatter(self.Ks, sigsig_diag, marker = '.')
+        ax2[1].plot(self.Ks, sigsig_diag)
+        ax2[1].set_ylabel('$< \sigma_{k\prime}^{+} \sigma_k^{-}>$')
+        ax2[2].scatter(self.Ks, asig_k_diag, marker = '.')
+        ax2[2].plot(self.Ks, asig_k_diag)
+        ax2[2].set_xlabel('$k$')
+        ax2[2].set_ylabel('$< a_{k\prime}^{+} \sigma_k^{+}>$')
+        fig2.suptitle('Initial Populations and Coherences in k-space')
+        fig2.tight_layout(h_pad=0.2)
+        if savefig:
+            plt.savefig(fname = 'state_i.jpg', format = 'jpg')
         
 if __name__ == '__main__':
     logging.basicConfig(
