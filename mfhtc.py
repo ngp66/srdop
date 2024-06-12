@@ -392,14 +392,21 @@ class HTC:
         n_kf, n_Mf, n_Lf, n_Uf, sigsigf, asig_kf, n_Bf = self.calculate_observables(state_f, kspace)
         return n_ki, n_Mi, n_Li, n_Ui, sigsigi, asig_ki, n_Bi
 
-    def calculate_n_photon(self, state):
+    def calculate_n_photon(self, state, kspace = False):
         """Calculates photonic population."""
         a, lp, l0 = self.split_reshape_return(state) 
-        n_k = np.outer(np.conj(a),a)*self.Nm # photon number; includes rescaling; currently in kspace
+        if kspace:
+            n_k = np.outer(np.conj(a),a)*self.Nm # photon number in kspace; includes rescaling
+        else:
+            n_kk = np.conj(a)*a*self.Nm # includes rescaling
+            a_k_fft = ifft(n_kk, axis = 0, norm = 'backward') # in real space, positive exponents 
+            n_k = np.zeros((self.Nk, self.Nk), dtype=complex) # initialise array for photon population values
+            for p, k in itertools.product(range(self.Nk), range(self.Nk)): # perform k'-k transform
+                n_k[p,k] = a_k_fft[p-k] # photon number in real space
         return n_k
 
     def calculate_n_molecular(self, state, kspace = False):
-        """Calculates molecular population."""
+        """Calculates molecular population (in real space)."""
         NE = self.params['NE']
         a, lp, l0 = self.split_reshape_return(state) 
         n_M = NE * (contract('a,an->n', self.coeffs['C_0'], l0) + self.coeffs['D_0']) # in real space
@@ -408,23 +415,23 @@ class HTC:
         return n_M
 
     def calculate_n_bright(self, state):
-        """Calculates population of bright exciton state."""
+        """Calculates population of bright exciton state (in real space)."""
         NE = self.params['NE']
         a, lp, l0 = self.split_reshape_return(state) 
-        zzlplp = contract('i,j,in,jn->n', self.consts['zetap'], self.consts['zetap'], lp, np.conj(lp)) # zeta(i+)zeta(j+)<lambda(i+)><lambda(j-)>
+        zlp = contract('i,in->n', self.consts['zetap'], lp) # zeta(i+)<lambda(i+)>
+        zzlplp = np.outer(zlp, np.conj(zlp)) # zeta(i+)zeta(j+)<lambda(i+)><lambda(j-)>
         zzl0 = contract('a,an->n', self.consts['zetazeta'], l0) # zeta(i+)zeta(j+)Z(i0i+j+)<lambda(i0)>
         delta_ij = np.eye(self.Nk)
-        #zzdelta_ij = contract('i,j,ij->n', self.consts['zetazeta'], l0)
-        n_B = (NE - 1)*zzlplp + zzl0 #+ delta_ij/self.Nnu # bright exciton population
+        n_B = (NE - 1)*zzlplp + zzl0 + delta_ij/self.Nnu # bright exciton population
         return n_B
         
-    def calculate_observables(self, state, kspace = False):
+    def calculate_observables(self, state, kspace = True):
         """Calculate polariton, photon and molecular numbers for a given state.""" 
         gp = self.gp
         a, lp, l0 = self.split_reshape_return(state) 
         z011 = gp.z_tensor((0,1,1))
         sNm = np.sqrt(self.Nm)
-        n_k = self.calculate_n_photon(state) # photonic population; includes rescaling
+        n_k = self.calculate_n_photon(state, kspace = True) # photonic population; includes rescaling
         n_M = self.calculate_n_molecular(state, kspace) # molecular population
         n_B = self.calculate_n_bright(state) # bright state population
         sig_plus = contract('i,in->n', self.consts['zetap'], lp)  # zeta(i+)<lambda(i+)>
@@ -440,7 +447,7 @@ class HTC:
         n_U = np.zeros((self.Nk, self.Nk), dtype=complex) # initialise array for upper polariton population values
         delta_k = np.eye(self.Nk) # equivalent to zeta(i+)zeta(j+)delta(i+,j+)
         for p, k in itertools.product(range(self.Nk), range(self.Nk)): 
-            sigsig[p, k] = sigsig_k1[k,p] - sigsig_k2[k-p] + post_l0[k-p] + (0.5/self.Nnu) * delta_k[k,p]
+            sigsig[p,k] = sigsig_k1[k,p] - sigsig_k2[k-p] + post_l0[k-p] + (0.5/self.Nnu) * delta_k[k,p]
             n_U[p,k] = self.coeffs['X_k'][p] * self.coeffs['X_k'][k] * sigsig[p,k] \
             + self.coeffs['Y_k'][p] * self.coeffs['Y_k'][k] * n_k[p,k] \
             + self.coeffs['X_k'][p] * self.coeffs['Y_k'][k] * asig_k[k,p] \
@@ -453,16 +460,18 @@ class HTC:
 
     def plot_n_L(self, tf, kspace = False, savefig = False):
         n_k, n_M, n_L, n_U, sigsig, asig_k, n_B = self.quick_integration(tf, kspace)
-        #print(n_U)
+        #print(n_k)
         #assert np.allclose(n_M.real + np.diag(n_k).real - np.diag(n_L).real, 0.0), "Polariton population not equal to sum of molecular and photon populations"
         assert np.allclose(np.diag(n_M).imag, 0.0), "Molecular population has imaginary components"
         assert np.allclose(np.diag(n_k).imag, 0.0), "Photon population has imaginary components"
         assert np.allclose(np.diag(n_L).imag, 0.0), "Lower polariton population has imaginary components"
         assert np.allclose(np.diag(n_U).imag, 0.0), "Upper polariton population has imaginary components"
+        assert np.allclose(np.diag(n_B).imag, 0.0), "Bright exciton population has imaginary components"
         assert np.allclose(np.diag(sigsig).imag, 0.0), "The coherences have imaginary components"
         n_U_diag = fftshift(np.diag(n_U).real) # shift back so that k=0 component is at the center
         n_L_diag = fftshift(np.diag(n_L).real) # shift back so that k=0 component is at the center
         n_k_diag = fftshift(np.diag(n_k).real) # shift back so that k=0 component is at the center
+        n_B_diag = fftshift(np.diag(n_B).real) # shift back so that k=0 component is at the center
         #n_M = fftshift(n_M.real)
         sigsig_diag = fftshift(np.diag(sigsig).real) 
         asig_k_diag = fftshift(np.diag(asig_k).real)
@@ -493,7 +502,13 @@ class HTC:
         fig2.tight_layout(h_pad=0.2)
         if savefig:
             plt.savefig(fname = 'state_i.jpg', format = 'jpg')
-        
+        fig3, ax3 = plt.subplots(1,1,figsize = (12,2))#,sharex = True)                
+        ax3.scatter(self.Ks, n_B_diag, marker = '.')
+        ax3.plot(self.Ks, n_B_diag)
+        ax3.set_ylabel('$n_B(k)$') #actually in real space!!!!!!!!
+        if savefig:
+            plt.savefig(fname = 'bright_population.jpg', format = 'jpg')
+            
 if __name__ == '__main__':
     logging.basicConfig(
         format='%(filename)s L%(lineno)s %(asctime)s %(levelname)s: %(message)s',
