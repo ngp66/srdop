@@ -461,7 +461,8 @@ class HTC:
     def plot_n_L(self, tf, kspace = False, savefig = False):
         n_k, n_M, n_L, n_U, sigsig, asig_k, n_B = self.quick_integration(tf, kspace)
         #print(n_k)
-        #assert np.allclose(n_M.real + np.diag(n_k).real - np.diag(n_L).real, 0.0), "Polariton population not equal to sum of molecular and photon populations"
+        assert np.allclose(np.diag(sigsig).real + np.diag(n_k).real - np.diag(n_L).real \
+                           - np.diag(n_U).real, 0.0), "Polariton population not equal to sum of molecular and photon populations"
         assert np.allclose(np.diag(n_M).imag, 0.0), "Molecular population has imaginary components"
         assert np.allclose(np.diag(n_k).imag, 0.0), "Photon population has imaginary components"
         assert np.allclose(np.diag(n_L).imag, 0.0), "Lower polariton population has imaginary components"
@@ -493,7 +494,7 @@ class HTC:
         ax2[0].set_ylabel('$n_k(k)$')
         ax2[1].scatter(self.Ks, sigsig_diag, marker = '.')
         ax2[1].plot(self.Ks, sigsig_diag)
-        ax2[1].set_ylabel('$< \sigma_{k\prime}^{+} \sigma_k^{-}>$')
+        ax2[1].set_ylabel('$n_m(k)$') #$< \sigma_{k\prime}^{+} \sigma_k^{-}>$')
         ax2[2].scatter(self.Ks, asig_k_diag, marker = '.')
         ax2[2].plot(self.Ks, asig_k_diag)
         ax2[2].set_xlabel('$k$')
@@ -505,7 +506,9 @@ class HTC:
         fig3, ax3 = plt.subplots(1,1,figsize = (12,2))#,sharex = True)                
         ax3.scatter(self.Ks, n_B_diag, marker = '.')
         ax3.plot(self.Ks, n_B_diag)
-        ax3.set_ylabel('$n_B(k)$') #actually in real space!!!!!!!!
+        ax3.set_ylabel('$n_B(r_n)$') #actually in real space!!!!!!!!
+        ax3.set_xlabel('$r_n$')
+        fig3.tight_layout(h_pad=0.2)
         if savefig:
             plt.savefig(fname = 'bright_population.jpg', format = 'jpg')
             
