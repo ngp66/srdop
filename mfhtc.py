@@ -402,20 +402,20 @@ class HTC:
         """Calculates molecular population."""
         NE = self.params['NE']
         a, lp, l0 = self.split_reshape_return(state) 
-        n_M = NE * (contract('a,an->n', self.coeffs['C_0'], l0) + self.coeffs['D_0']) # n_M(rn)
+        n_M = NE * (contract('a,an->n', self.coeffs['C_0'], l0) + self.coeffs['D_0']) # in real space
         if kspace:
-            n_M = fft(n_M, axis = 0, norm = 'backward') # n_M(k); normalisation?
+            n_M = fft(n_M, axis = 0, norm = 'backward') # in k-space; normalisation?
         return n_M
 
     def calculate_n_bright(self, state):
-        """Calculates population of bright state."""
+        """Calculates population of bright exciton state."""
         NE = self.params['NE']
         a, lp, l0 = self.split_reshape_return(state) 
         zzlplp = contract('i,j,in,jn->n', self.consts['zetap'], self.consts['zetap'], lp, np.conj(lp)) # zeta(i+)zeta(j+)<lambda(i+)><lambda(j-)>
         zzl0 = contract('a,an->n', self.consts['zetazeta'], l0) # zeta(i+)zeta(j+)Z(i0i+j+)<lambda(i0)>
         delta_ij = np.eye(self.Nk)
         #zzdelta_ij = contract('i,j,ij->n', self.consts['zetazeta'], l0)
-        n_B = (self.params['NE'] - 1)*zzlplp + zzl0 #+ delta_ij/self.Nnu # bright state population
+        n_B = (NE - 1)*zzlplp + zzl0 #+ delta_ij/self.Nnu # bright exciton population
         return n_B
         
     def calculate_observables(self, state, kspace = False):
@@ -440,15 +440,15 @@ class HTC:
         n_U = np.zeros((self.Nk, self.Nk), dtype=complex) # initialise array for upper polariton population values
         delta_k = np.eye(self.Nk) # equivalent to zeta(i+)zeta(j+)delta(i+,j+)
         for p, k in itertools.product(range(self.Nk), range(self.Nk)): 
-            sigsig[p, k] = sigsig_k1[p, k] - sigsig_k2[k-p] + post_l0[k-p] + (0.5/self.Nnu) * delta_k[k,p]
-            n_U[p,k] = self.coeffs['X_k'][p] * self.coeffs['X_k'][k] * sigsig[p, k] \ # calculate upper polariton population
-            + self.coeffs['Y_k'][p] * self.coeffs['Y_k'][k] * n_k[p, k] \
+            sigsig[p, k] = sigsig_k1[k,p] - sigsig_k2[k-p] + post_l0[k-p] + (0.5/self.Nnu) * delta_k[k,p]
+            n_U[p,k] = self.coeffs['X_k'][p] * self.coeffs['X_k'][k] * sigsig[p,k] \
+            + self.coeffs['Y_k'][p] * self.coeffs['Y_k'][k] * n_k[p,k] \
             + self.coeffs['X_k'][p] * self.coeffs['Y_k'][k] * asig_k[k,p] \
             + self.coeffs['Y_k'][p] * self.coeffs['X_k'][k] * np.conj(asig_k[p,k])
-            n_L[p, k] = self.coeffs['X_k'][p] * self.coeffs['X_k'][k] * n_k[p, k] \ # calculate lower polariton population
-            + self.coeffs['Y_k'][p] * self.coeffs['Y_k'][k] * sigsig[p, k] \
+            n_L[p, k] = self.coeffs['X_k'][p] * self.coeffs['X_k'][k] * n_k[p,k] \
+            + self.coeffs['Y_k'][p] * self.coeffs['Y_k'][k] * sigsig[p,k] \
             - self.coeffs['X_k'][p] * self.coeffs['Y_k'][k] * np.conj(asig_k[p,k]) \
-            - self.coeffs['Y_k'][p] * self.coeffs['X_k'][k] * asig_k[k, p]
+            - self.coeffs['Y_k'][p] * self.coeffs['X_k'][k] * asig_k[k,p]
         return n_k, n_M, n_L, n_U, sigsig, asig_k, n_B
 
     def plot_n_L(self, tf, kspace = False, savefig = False):
@@ -488,7 +488,7 @@ class HTC:
         ax2[2].scatter(self.Ks, asig_k_diag, marker = '.')
         ax2[2].plot(self.Ks, asig_k_diag)
         ax2[2].set_xlabel('$k$')
-        ax2[2].set_ylabel('$< a_{k\prime}^{+} \sigma_k^{+}>$')
+        ax2[2].set_ylabel('$< a_{k\prime} \sigma_k^{+}>$')
         fig2.suptitle('Initial Populations and Coherences in k-space')
         fig2.tight_layout(h_pad=0.2)
         if savefig:
