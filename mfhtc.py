@@ -267,6 +267,9 @@ class HTC:
         consts['zetap'] = gp.get_coefficients(np.kron(sp, bi), sgn=1, eye=False)
         consts['zetazeta'] = contract('i,j,aij->a', consts['zetap'],
                              consts['zetap'], z011)
+        # C^0_{i_0} and D^0 from thesis
+        coeffs['C_0'], coeffs['D_0'] = \
+                self.gp.get_coefficients(np.kron(Pauli.p1, self.boson.i), sgn=0, eye=True)
         # CIJ means Jth coeff. of Ith eqn.
         # Written in terms of rescaled a: a_tilda = a / sqrt(Nm)
         # EQ 1 
@@ -379,28 +382,37 @@ class HTC:
         dy_state = np.concatenate((dy_a, dy_lp, dy_l0), axis=None)
         return dy_state
 
-    def quick_integration(self, tf):
+    def quick_integration(self, tf, kspace = False):
         """Integrates the equations of motion from t = 0 to tf using solve_ivp."""
         state_i = self.initial_state()
-        n_ki, n_Li = self.calculate_observables(state_i)
+        n_ki, n_Mi, n_Li, n_Ui, sigsigi = self.calculate_observables(state_i, kspace)
         ivp = solve_ivp(self.eoms, [0,tf], state_i, dense_output=True)
         state_f = ivp.y[:,-1]
         #a_f, lp_f, l0_f = self.split_reshape_return(state_f) 
-        n_kf, n_Lf = self.calculate_observables(state_f)
-        return n_ki, n_Li
+        n_kf, n_Mf, n_Lf, n_Uf, sigsigf = self.calculate_observables(state_f, kspace)
+        return n_ki, n_Mi, n_Li, n_Ui, sigsigi
 
     def calculate_n_photon(self, state):
         a, lp, l0 = self.split_reshape_return(state) 
-        n_k = np.outer(np.conj(a),a)*self.Nm # photon number; includes rescaling
+        n_k = np.outer(np.conj(a),a)*self.Nm # photon number; includes rescaling; currently in kspace
         return n_k
+
+    def calculate_n_molecular(self, state, kspace = False):
+        NE = self.params['NE']
+        a, lp, l0 = self.split_reshape_return(state) 
+        n_M = NE * (contract('a,an->n', self.coeffs['C_0'], l0) + self.coeffs['D_0']) # n_M(rn)
+        if kspace:
+            n_M = fft(n_M, axis = 0, norm = 'backward') # n_M(k); normalisation?
+        return n_M
         
-    def calculate_observables(self, state):
+    def calculate_observables(self, state, kspace = False):
         """Calculate polariton, photon and molecular numbers for a given state.""" 
         gp = self.gp
         a, lp, l0 = self.split_reshape_return(state) 
         z011 = gp.z_tensor((0,1,1))
         sNm = np.sqrt(self.Nm)
-        n_k = self.calculate_n_photon(state) # photon number; includes rescaling
+        n_k = self.calculate_n_photon(state) # photonic population; includes rescaling
+        n_M = self.calculate_n_molecular(state, kspace) # molecular population
         pre_zlp = contract('i,in->n', self.consts['zetap'], lp)
         post_zlp = fft(pre_zlp, axis = 0, norm = 'ortho')
         asig_k = np.outer(a, post_zlp)*sNm # expectation value <a_k sigma_k'+>
@@ -412,25 +424,40 @@ class HTC:
         post_l0 = fft(pre_l0, axis = 0, norm = 'backward')
         sigsig = np.zeros((self.Nk, self.Nk), dtype=complex)
         n_L = np.zeros((self.Nk, self.Nk), dtype=complex)
-        #for p in range(self.Nk):
-            #for k in range(self.Nk):
+        n_U = np.zeros((self.Nk, self.Nk), dtype=complex)
         delta_k = np.eye(self.Nk)
-        for p, k in itertools.product(range(self.Nk), range(self.Nk)): # polariton expectation value <L_k'+, L_k>
+        for p, k in itertools.product(range(self.Nk), range(self.Nk)): # polariton population
             sigsig[p, k] = sigsig_k1[p, k] - sigsig_k2[k-p] + post_l0[k-p] + (0.5/self.Nnu) * delta_k[k,p]
             n_L[p, k] = self.coeffs['X_k'][p] * self.coeffs['X_k'][k] * n_k[p, k] + self.coeffs['Y_k'][p] * self.coeffs['Y_k'][k] * sigsig[p, k] \
             - self.coeffs['X_k'][p] * self.coeffs['Y_k'][k] * np.conj(asig_k[p,k]) - self.coeffs['Y_k'][p] * self.coeffs['X_k'][k] * asig_k[p, k]
-        return n_k, n_L
+            n_U[p,k] = self.coeffs['X_k'][p] * self.coeffs['X_k'][k] * sigsig[p, k] + self.coeffs['Y_k'][p] * self.coeffs['Y_k'][k] * n_k[p, k] \
+            + self.coeffs['X_k'][p] * self.coeffs['Y_k'][k] * np.conj(asig_k[p,k]) + self.coeffs['Y_k'][p] * self.coeffs['X_k'][k] * asig_k[p, k]
+        return n_k, n_M, n_L, n_U, sigsig
 
-    def plot_n_L(self, tf):
-        n_k, n_L = self.quick_integration(tf)
-        assert np.allclose(np.diag(n_L).imag, 0.0), "Polariton population has imaginary components"
-        n_L_diag = fftshift(np.diag(n_L).real) # shift back so that 0 is at the center
-        fig, ax = plt.subplots(1,1,figsize = (10,4))
-        ax.scatter(self.Ks, n_L_diag, marker = '.')
-        ax.plot(self.Ks, n_L_diag)
-        ax.set_xlabel('$k$')
-        ax.set_ylabel('$n_L(k)$')
-        ax.set_title('Initial Polariton Population')
+    def plot_n_L(self, tf, kspace = False):
+        n_k, n_M, n_L, n_U, sigsig = self.quick_integration(tf, kspace)
+        #assert np.allclose(n_M + np.diag(n_k).real - np.diag(n_L).real, 0.0), "Polariton population not equal to sum of molecular and photon populations"
+        assert np.allclose(np.diag(n_M).imag, 0.0), "Polariton population has imaginary components"
+        assert np.allclose(np.diag(n_k).imag, 0.0), "Photon population has imaginary components"
+        assert np.allclose(np.diag(n_L).imag, 0.0), "Molecular population has imaginary components"
+        assert np.allclose(np.diag(sigsig).imag, 0.0), "The coherences have imaginary components"
+        n_L_diag = fftshift(np.diag(n_L).real) # shift back so that k=0 is at the center
+        n_k_diag = fftshift(np.diag(n_k).real)
+        #n_M = fftshift(n_M.real)
+        sigsig_diag = fftshift(np.diag(sigsig).real)
+        fig, ax = plt.subplots(3,1,figsize = (12,6),sharex = True)
+        ax[0].scatter(self.Ks, n_L_diag, marker = '.')
+        ax[0].plot(self.Ks, n_L_diag)
+        ax[0].set_ylabel('$n_L(k)$')
+        ax[1].scatter(self.Ks, n_k_diag, marker = '.')
+        ax[1].plot(self.Ks, n_k_diag)
+        ax[1].set_ylabel('$n_k(k)$')
+        ax[2].scatter(self.Ks, sigsig_diag, marker = '.')
+        ax[2].plot(self.Ks, sigsig_diag)
+        ax[2].set_xlabel('$k$')
+        ax[2].set_ylabel('$< \sigma_{k\prime}^{+} \sigma_k^{-}>$')
+        fig.suptitle('Initial Populations')
+        fig.tight_layout(h_pad=0.2)
         plt.savefig(fname = 'state_i.jpg', format = 'jpg')
         
 if __name__ == '__main__':
@@ -467,4 +494,4 @@ if __name__ == '__main__':
     
     htc = HTC(params)
     htc.quick_integration(100)
-    htc.plot_n_L(100)
+    htc.plot_n_L(100, kspace = True)
