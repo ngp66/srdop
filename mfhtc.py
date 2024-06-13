@@ -488,7 +488,7 @@ class HTC:
         ax1[2].set_ylabel('$n_k(k)$')
         ax1[3].scatter(self.Ks, sigsig_diag, marker = '.')
         ax1[3].plot(self.Ks, sigsig_diag)
-        ax1[3].set_ylabel('$n_m(k)$') #$< \sigma_{k\prime}^{+} \sigma_k^{-}>$')
+        ax1[3].set_ylabel('$< \sigma_{k\prime}^{+} \sigma_k^{-}>$') #n_m(k)
         ax1[4].scatter(self.Ks, asig_k_diag, marker = '.')
         ax1[4].plot(self.Ks, asig_k_diag)
         ax1[4].set_xlabel('$k$')
