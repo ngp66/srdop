@@ -267,6 +267,7 @@ class HTC:
         consts['zetap'] = gp.get_coefficients(np.kron(sp, bi), sgn=1, eye=False)
         consts['zetazeta'] = contract('i,j,aij->a', consts['zetap'],
                              consts['zetap'], z011)
+        print(consts['zetazeta'])
         # C^0_{i_0} and D^0 from thesis
         coeffs['C_0'], coeffs['D_0'] = \
                 self.gp.get_coefficients(np.kron(Pauli.p1, self.boson.i), sgn=0, eye=True)
@@ -329,27 +330,24 @@ class HTC:
         #state = np.zeros(self.state_length, dtype=complex) 
         rho0_vib = self.thermal_rho_vib(self.params['T']) # molecular vibrational density matrix
         shifted_Ks = np.fft.ifftshift(self.Ks) 
-        print(self.params['A'])
         alpha_k = self.params['A']*np.exp(-(shifted_Ks-self.params['k_0'])**2 / (2*self.params['sig_0']**2)) # create gaussian profile at k values
         # build density matrices
-        TLS_matrix = np.array([[0,0],[0,1]]) # initially in ground state
+        TLS_matrix = np.array([[0.0,0.0],[0.0,1.0]]) # initially in ground state
         a0, lp0, l00 = [], [], [] 
         a0.append(alpha_k*self.coeffs['X_k']) # expectation values of initial a_k (not rescaled)
         for n in range(self.Nk):
             beta_n = fft(-alpha_k*self.coeffs['Y_k'], axis=0, norm='ortho')[n]  #is the norm truly ortho here? or stick to previous convention?
             beta_n *= np.sqrt(self.NE) # is the normalisation correct? Nm rather than Nk
-            U_n = expm(np.array([[0, beta_n],[-np.conj(beta_n), 0]]))
-            U_n_dag = U_n.conj().T 
+            U_n = expm(np.array([[0.0, beta_n],[-np.conj(beta_n), 0.0]]))
+            U_n_dag = U_n.conj().T
             exciton_matrix_n = U_n @ TLS_matrix @ U_n_dag # initial exciton matrix
             rho0n = np.kron(exciton_matrix_n, rho0_vib) # total density operator
             coeffsp0 = self.gp.get_coefficients(rho0n, sgn=1, warn=False) # lambda i+
-            lp0.append(coeffsp0)
+            lp0.append(2*coeffsp0)
             coeffs00 = self.gp.get_coefficients(rho0n, sgn=0, warn=False) # lambda i0
-            l00.append(coeffs00)
-            print(rho0n)
+            l00.append(2*coeffs00)
         # flatten and concatenate to match input state structure of RK (1d array)
         state = np.concatenate((a0, lp0, l00), axis=None)
-       
         assert len(state) == self.state_length, 'Initial state does not match the required dimensions'
         return state
 
