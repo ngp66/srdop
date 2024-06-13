@@ -48,7 +48,7 @@ class HTC:
     DEFAULT_PARAMS = {
             'Q0': 15, # how many modes either side of K0 (or 0 for populations) to include; 2*Q0+1 modes total 
             'Nm': 6001, # Number of molecules
-            'Nnu':1, # Number of vibrational levels for each molecules
+            'Nnu': 1, # Number of vibrational levels for each molecules
             'L': 60.0, # Crystal propagation length, inverse micro meters
             'nr':1.0, # refractive index, sets effective speed of light c/nr
             'omega_c':1.94, # omega_0 = 1.94eV (Fig S4C)
@@ -63,9 +63,9 @@ class HTC:
             'T':0.026, # k_B T in eV (.0259=300K, .026=302K)
             'gam_nu':0.01, # vibrational damping rate
             'initial_state': 'photonic', # or incoherent
-            'A': 1.0, # amplitude of initial wavepacket
-            'k_0':0.01, # central wavenumber of initial wavepacket
-            'sig_0':0.1, # s.d. of initial wavepacket
+            'A': 0.8, # amplitude of initial wavepacket
+            'k_0': 3.0, # central wavenumber of initial wavepacket
+            'sig_0': 4.0, # s.d. of initial wavepacket
             #'sig_f':0, # s.d. in microns instead (if specified)
             'atol':1e-9, # solver tolerance
             'rtol':1e-6, # solver tolerance
@@ -340,15 +340,16 @@ class HTC:
             U_n = expm(np.array([[0.0, beta_n],[-np.conj(beta_n), 0.0]]))
             U_n_dag = U_n.conj().T
             exciton_matrix_n = U_n @ TLS_matrix @ U_n_dag # initial exciton matrix
+            #print(exciton_matrix_n)
             rho0n = np.kron(exciton_matrix_n, rho0_vib) # total density operator
             coeffsp0 = self.gp.get_coefficients(rho0n, sgn=1, warn=False) # lambda i+
             lp0.append(2*coeffsp0)
             coeffs00 = self.gp.get_coefficients(rho0n, sgn=0, warn=False) # lambda i0
             l00.append(2*coeffs00)
-            a0[0][n] = 0.0 # create purely excitonic initial state
+            #a0[0][n] = 0.0 # create purely excitonic initial state
         # flatten and concatenate to match input state structure of RK (1d array)
         state = np.concatenate((a0, lp0, l00), axis=None)
-        print('Initial state contains only excitonic component')
+        #print('Initial state contains only excitonic component')
         assert len(state) == self.state_length, 'Initial state does not match the required dimensions'
         return state
 
@@ -449,16 +450,14 @@ class HTC:
         sigsig = np.zeros((self.Nk, self.Nk), dtype=complex) # initialise array for <sigma(k'+)sigma(k-)> values
         n_L = np.zeros((self.Nk, self.Nk), dtype=complex) # initialise array for lower polariton population values
         n_U = np.zeros((self.Nk, self.Nk), dtype=complex) # initialise array for upper polariton population values
-        delta_k = np.eye(self.Nk) # equivalent to zeta(i+)zeta(j+)delta(i+,j+)
+        delta_k = np.eye(self.Nk) # equivalent to 2*Nnu*zeta(i+)zeta(j+)delta(i+,j+)
         for p, k in itertools.product(range(self.Nk), range(self.Nk)): 
             sigsig[p,k] = sigsig_k1[k,p] - sigsig_k2[k-p] + post_l0[k-p] + (0.5/self.Nnu) * delta_k[k,p]
             n_U[p,k] = self.coeffs['X_k'][p] * self.coeffs['X_k'][k] * sigsig[p,k] \
             + self.coeffs['Y_k'][p] * self.coeffs['Y_k'][k] * n_k[p,k] \
             + self.coeffs['X_k'][p] * self.coeffs['Y_k'][k] * asig_k[k,p] \
             + self.coeffs['Y_k'][p] * self.coeffs['X_k'][k] * np.conj(asig_k[p,k])
-            if k == p:
-                print((self.coeffs['X_k'][p] * self.coeffs['X_k'][k] * sigsig[p,k]).real + (self.coeffs['Y_k'][p] * self.coeffs['Y_k'][k] * n_k[p,k]).real, (self.coeffs['X_k'][p] * self.coeffs['X_k'][k] * n_k[p,k]).real + (self.coeffs['Y_k'][p] * self.coeffs['Y_k'][k] * sigsig[p,k]).real)
-            n_L[p, k] = self.coeffs['X_k'][p] * self.coeffs['X_k'][k] * n_k[p,k] \
+            n_L[p,k] = self.coeffs['X_k'][p] * self.coeffs['X_k'][k] * n_k[p,k] \
             + self.coeffs['Y_k'][p] * self.coeffs['Y_k'][k] * sigsig[p,k] \
             - self.coeffs['X_k'][p] * self.coeffs['Y_k'][k] * np.conj(asig_k[p,k]) \
             - self.coeffs['Y_k'][p] * self.coeffs['X_k'][k] * asig_k[k,p]
@@ -540,7 +539,7 @@ if __name__ == '__main__':
         'T':0.026, # k_B T in eV (.0259=300K, .026=302K)
         'gam_nu':0.01, # vibrational damping rate
         'initial_state': 'incoherent', # or incoherent
-        'A': 1.0, # amplitude of initial wavepacket
+        'A': 0.8, # amplitude of initial wavepacket
         'k_0': 3.0, # central wavenumber of initial wavepacket
         'sig_0': 4.0, # s.d. of initial wavepacket
         #'sig_f':0, # s.d. in microns instead (if specified)
@@ -551,4 +550,4 @@ if __name__ == '__main__':
     
     htc = HTC(params)
     htc.quick_integration(100)
-    htc.plot_n_L(100, kspace = True)
+    htc.plot_n_L()
