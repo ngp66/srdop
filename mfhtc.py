@@ -267,7 +267,6 @@ class HTC:
         consts['zetap'] = gp.get_coefficients(np.kron(sp, bi), sgn=1, eye=False)
         consts['zetazeta'] = contract('i,j,aij->a', consts['zetap'],
                              consts['zetap'], z011)
-        print(consts['zetazeta'])
         # C^0_{i_0} and D^0 from thesis
         coeffs['C_0'], coeffs['D_0'] = \
                 self.gp.get_coefficients(np.kron(Pauli.p1, self.boson.i), sgn=0, eye=True)
@@ -386,12 +385,12 @@ class HTC:
     def quick_integration(self, tf, kspace = False):
         """Integrates the equations of motion from t = 0 to tf using solve_ivp."""
         state_i = self.initial_state()
-        n_ki, n_Li, n_Ui, sigsigi, asig_ki, n_Bi = self.calculate_observables(state_i, kspace)
+        #n_ki, n_Li, n_Ui, sigsigi, asig_ki, n_Bi = self.calculate_observables(state_i, kspace)
         ivp = solve_ivp(self.eoms, [0,tf], state_i, dense_output=True)
         state_f = ivp.y[:,-1]
         #a_f, lp_f, l0_f = self.split_reshape_return(state_f) 
-        n_kf, n_Lf, n_Uf, sigsigf, asig_kf, n_Bf = self.calculate_observables(state_f, kspace)
-        return n_ki, n_Li, n_Ui, sigsigi, asig_ki, n_Bi
+        #n_kf, n_Lf, n_Uf, sigsigf, asig_kf, n_Bf = self.calculate_observables(state_f, kspace)
+        return state_f
 
     def calculate_n_photon(self, state, kspace = False):
         """Calculates photonic population."""
@@ -428,7 +427,7 @@ class HTC:
 
     #def calculate_coherences(self,state):
         
-    def calculate_observables(self, state, kspace = True):
+    def calculate_observables(self, state):
         """Calculate polariton, photon and molecular numbers for a given state.""" 
         gp = self.gp
         a, lp, l0 = self.split_reshape_return(state) 
@@ -455,14 +454,21 @@ class HTC:
             + self.coeffs['Y_k'][p] * self.coeffs['Y_k'][k] * n_k[p,k] \
             + self.coeffs['X_k'][p] * self.coeffs['Y_k'][k] * asig_k[k,p] \
             + self.coeffs['Y_k'][p] * self.coeffs['X_k'][k] * np.conj(asig_k[p,k])
+            if k == p:
+                print((self.coeffs['X_k'][p] * self.coeffs['X_k'][k] * sigsig[p,k]).real + (self.coeffs['Y_k'][p] * self.coeffs['Y_k'][k] * n_k[p,k]).real, (self.coeffs['X_k'][p] * self.coeffs['X_k'][k] * n_k[p,k]).real + (self.coeffs['Y_k'][p] * self.coeffs['Y_k'][k] * sigsig[p,k]).real)
             n_L[p, k] = self.coeffs['X_k'][p] * self.coeffs['X_k'][k] * n_k[p,k] \
             + self.coeffs['Y_k'][p] * self.coeffs['Y_k'][k] * sigsig[p,k] \
             - self.coeffs['X_k'][p] * self.coeffs['Y_k'][k] * np.conj(asig_k[p,k]) \
             - self.coeffs['Y_k'][p] * self.coeffs['X_k'][k] * asig_k[k,p]
         return n_k, n_L, n_U, sigsig, asig_k, n_B
 
-    def plot_n_L(self, tf, kspace = False, savefig = False):
-        n_k, n_L, n_U, sigsig, asig_k, n_B = self.quick_integration(tf, kspace)
+    def calculate_initial_observables(self):
+        state_i = self.initial_state()
+        n_ki, n_Li, n_Ui, sigsigi, asig_ki, n_Bi = self.calculate_observables(state_i)
+        return n_ki, n_Li, n_Ui, sigsigi, asig_ki, n_Bi
+        
+    def plot_n_L(self, savefig = False):
+        n_k, n_L, n_U, sigsig, asig_k, n_B = self.calculate_initial_observables()
         #print(n_k)
         assert np.allclose(np.diag(sigsig).real + np.diag(n_k).real - np.diag(n_L).real \
                            - np.diag(n_U).real, 0.0), "Polariton population not equal to sum of molecular and photon populations"
@@ -543,4 +549,4 @@ if __name__ == '__main__':
     
     htc = HTC(params)
     htc.quick_integration(100)
-    htc.plot_n_L(100, kspace = True)
+    htc.plot_n_L()
