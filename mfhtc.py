@@ -345,8 +345,10 @@ class HTC:
             lp0.append(2*coeffsp0)
             coeffs00 = self.gp.get_coefficients(rho0n, sgn=0, warn=False) # lambda i0
             l00.append(2*coeffs00)
+            a0[0][n] = 0.0 # create purely excitonic initial state
         # flatten and concatenate to match input state structure of RK (1d array)
         state = np.concatenate((a0, lp0, l00), axis=None)
+        print('Initial state contains only excitonic component')
         assert len(state) == self.state_length, 'Initial state does not match the required dimensions'
         return state
 
@@ -549,4 +551,4 @@ if __name__ == '__main__':
     
     htc = HTC(params)
     htc.quick_integration(100)
-    htc.plot_n_L()
+    htc.plot_n_L(100, kspace = True)
