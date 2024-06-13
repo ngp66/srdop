@@ -63,7 +63,7 @@ class HTC:
             'T':0.026, # k_B T in eV (.0259=300K, .026=302K)
             'gam_nu':0.01, # vibrational damping rate
             'initial_state': 'photonic', # or incoherent
-            'A':1, # amplitude of initial wavepacket
+            'A': 1.0, # amplitude of initial wavepacket
             'k_0':0.01, # central wavenumber of initial wavepacket
             'sig_0':0.1, # s.d. of initial wavepacket
             #'sig_f':0, # s.d. in microns instead (if specified)
@@ -329,6 +329,7 @@ class HTC:
         #state = np.zeros(self.state_length, dtype=complex) 
         rho0_vib = self.thermal_rho_vib(self.params['T']) # molecular vibrational density matrix
         shifted_Ks = np.fft.ifftshift(self.Ks) 
+        print(self.params['A'])
         alpha_k = self.params['A']*np.exp(-(shifted_Ks-self.params['k_0'])**2 / (2*self.params['sig_0']**2)) # create gaussian profile at k values
         # build density matrices
         TLS_matrix = np.array([[0,0],[0,1]]) # initially in ground state
@@ -345,8 +346,10 @@ class HTC:
             lp0.append(coeffsp0)
             coeffs00 = self.gp.get_coefficients(rho0n, sgn=0, warn=False) # lambda i0
             l00.append(coeffs00)
+            print(rho0n)
         # flatten and concatenate to match input state structure of RK (1d array)
         state = np.concatenate((a0, lp0, l00), axis=None)
+       
         assert len(state) == self.state_length, 'Initial state does not match the required dimensions'
         return state
 
@@ -424,6 +427,8 @@ class HTC:
         delta_ij = np.eye(self.Nk)
         n_B = (NE - 1)*zzlplp + zzl0 + delta_ij/self.Nnu # bright exciton population
         return n_B
+
+    #def calculate_coherences(self,state):
         
     def calculate_observables(self, state, kspace = True):
         """Calculate polariton, photon and molecular numbers for a given state.""" 
@@ -529,9 +534,9 @@ if __name__ == '__main__':
         'T':0.026, # k_B T in eV (.0259=300K, .026=302K)
         'gam_nu':0.01, # vibrational damping rate
         'initial_state': 'incoherent', # or incoherent
-        'A': 1, # amplitude of initial wavepacket
-        'k_0': 3, # central wavenumber of initial wavepacket
-        'sig_0': 4, # s.d. of initial wavepacket
+        'A': 1.0, # amplitude of initial wavepacket
+        'k_0': 3.0, # central wavenumber of initial wavepacket
+        'sig_0': 4.0, # s.d. of initial wavepacket
         #'sig_f':0, # s.d. in microns instead (if specified)
         'atol':1e-9, # solver tolerance
         'rtol':1e-6, # solver tolerance
