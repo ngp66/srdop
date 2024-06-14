@@ -335,12 +335,11 @@ class HTC:
         a0, lp0, l00 = [], [], [] 
         a0.append(alpha_k*self.coeffs['X_k']) # expectation values of initial a_k (not rescaled)
         for n in range(self.Nk):
-            beta_n = fft(-alpha_k*self.coeffs['Y_k'], axis=0, norm='ortho')[n]  #is the norm truly ortho here? or stick to previous convention?
-            beta_n *= np.sqrt(self.NE) # is the normalisation correct? Nm rather than Nk
+            beta_n = fft(-alpha_k*self.coeffs['Y_k'], axis=0, norm='ortho')[n]  
+            beta_n *= self.params['NE'] # is the normalisation correct? Nm rather than Nk
             U_n = expm(np.array([[0.0, beta_n],[-np.conj(beta_n), 0.0]]))
             U_n_dag = U_n.conj().T
             exciton_matrix_n = U_n @ TLS_matrix @ U_n_dag # initial exciton matrix
-            #print(exciton_matrix_n)
             rho0n = np.kron(exciton_matrix_n, rho0_vib) # total density operator
             coeffsp0 = self.gp.get_coefficients(rho0n, sgn=1, warn=False) # lambda i+
             lp0.append(2*coeffsp0)
@@ -388,66 +387,57 @@ class HTC:
     def quick_integration(self, tf, kspace = False):
         """Integrates the equations of motion from t = 0 to tf using solve_ivp."""
         state_i = self.initial_state()
-        #n_ki, n_Li, n_Ui, sigsigi, asig_ki, n_Bi = self.calculate_observables(state_i, kspace)
         ivp = solve_ivp(self.eoms, [0,tf], state_i, dense_output=True)
         state_f = ivp.y[:,-1]
-        #a_f, lp_f, l0_f = self.split_reshape_return(state_f) 
-        #n_kf, n_Lf, n_Uf, sigsigf, asig_kf, n_Bf = self.calculate_observables(state_f, kspace)
         return state_f
 
-    def calculate_n_photon(self, a, kspace = False):
+    def calculate_n_photon(self, a, kspace = False, evolve = False):
         """Calculates photonic population."""
-        #a, lp, l0 = self.split_reshape_return(state) 
         if kspace:
-            #a = fftshift(a) # order -Q0, -Q0+1,...,0,..., +Q0 - not if want to be compatible with LP calculation
-            return np.outer(np.conj(a),a)*self.Nm # photon number in kspace; includes rescaling
+            if evolve:
+                return np.outer(np.conj(a),a)*self.Nm # photon number in kspace; includes rescaling - function should be passed to eoms
+            else:
+                return np.outer(np.conj(a),a) # no rescaling as function not passed to eoms
         a_r = fft(a, norm = 'ortho')
         return np.conj(a_r) * a_r # Check
-        #else:
-        #    n_kk = np.conj(a)*a*self.Nm # includes rescaling
-        #    a_k_fft = ifft(n_kk, axis = 0, norm = 'backward') # in real space, positive exponents 
-        #    n_k = np.zeros((self.Nk, self.Nk), dtype=complex) # initialise array for photon population values
-        #    for p, k in itertools.product(range(self.Nk), range(self.Nk)): # perform k'-k transform
-        #        n_k[p,k] = a_k_fft[p-k] # photon number in real space
 
-    def calculate_n_molecular(self, state, kspace = False):
+    def calculate_n_molecular(self, l0, kspace = False):
         """Calculates molecular population (in real space)."""
         NE = self.params['NE']
-        a, lp, l0 = self.split_reshape_return(state) 
         n_M = NE * (contract('a,an->n', self.coeffs['C_0'], l0) + self.coeffs['D_0']) # in real space
         #if kspace:
         #    n_M = fft(n_M, axis = 0, norm = 'backward') # in k-space; normalisation?
         return n_M
 
-    def calculate_n_bright(self, state):
+    def calculate_n_bright(self, l0, lp):
         """Calculates population of bright exciton state (in real space)."""
         NE = self.params['NE']
-        a, lp, l0 = self.split_reshape_return(state) 
         zlp = contract('i,in->n', self.consts['zetap'], lp) # zeta(i+)<lambda(i+)>
         zzlplp = np.outer(zlp, np.conj(zlp)) # zeta(i+)zeta(j+)<lambda(i+)><lambda(j-)>
         zzl0 = contract('a,an->n', self.consts['zetazeta'], l0) # zeta(i+)zeta(j+)Z(i0i+j+)<lambda(i0)>
-        #delta_ij = np.eye(self.Nk)
-        #n_B = (NE - 1)*zzlplp + zzl0 + delta_ij/self.Nnu # bright exciton population
         n_B = (NE - 1)*zzlplp + zzl0 + 0.5 # bright excition population; note zzl0 + 0.5 == n_M/NE so if already computed n_M could use that
         return n_B
 
     #def calculate_coherences(self,state):
         
-    def calculate_observables(self, state):
+    def calculate_observables(self, state, evolution = True):
         """Calculate polariton, photon and molecular numbers for a given state.""" 
         gp = self.gp
         a, lp, l0 = self.split_reshape_return(state) 
         z011 = gp.z_tensor((0,1,1))
+        NE = self.params['NE']
         sNm = np.sqrt(self.Nm)
-        sNE = np.sqrt(self.NE)
+        sNE = np.sqrt(NE)
         n_k = self.calculate_n_photon(a, kspace = True) # photonic population; includes rescaling
-        #n_M = self.calculate_n_molecular(state, kspace) # molecular population
-        n_B = self.calculate_n_bright(state) # bright state population
+        #n_M = self.calculate_n_molecular(l0, kspace) # molecular population
+        n_B = self.calculate_n_bright(l0, lp) # bright state population
         sig_plus = contract('i,in->n', self.consts['zetap'], lp)  # zeta(i+)<lambda(i+)>
         post_sigp = fft(sig_plus, axis = 0, norm = 'ortho') # (in k-space, negative exponents) 
-        #asig_k = np.outer(a, post_sigp)*sNm # expectation value <a_k sigma(k'+)>; includes rescaling
-        asig_k = np.outer(a, post_sigp)*sNm*sNE # expectation value <a_k sigma(k'+)>; includes rescaling
-        sigsig_k1 = np.outer(post_sigp, np.conj(post_sigp))*self.params['NE'] # first term of <sigma(k'+)sigma(k-)>
+        if evolution:
+            asig_k = np.outer(a, post_sigp)*sNm*sNE # expectation value <a_k sigma(k'+)>; includes rescaling
+        else:
+            asig_k = np.outer(a, post_sigp)*sNE # expectation value <a_k sigma(k'+)>; includes rescaling
+        sigsig_k1 = np.outer(post_sigp, np.conj(post_sigp))*NE # first term of <sigma(k'+)sigma(k-)>
         sig_abs_sq = sig_plus * sig_plus.conj()  # zeta(i+)zeta(j+)<lambda(i+)><lambda(j-)>
         sigsig_k2 = ifft(sig_abs_sq, axis=0, norm='backward') # (in k-space, positive exponents)
         pre_l0 = contract('a,an->n', self.consts['zetazeta'], l0) # zeta(i+)zeta(j+)Z+(i0i+j+)<lambda(i0)> (in real space)
@@ -545,7 +535,7 @@ if __name__ == '__main__':
         'gam_nu':0.01, # vibrational damping rate
         'initial_state': 'incoherent', # or incoherent
         'A': 0.8, # amplitude of initial wavepacket
-        'k_0': 3.0, # central wavenumber of initial wavepacket
+        'k_0': 0.0, # central wavenumber of initial wavepacket
         'sig_0': 4.0, # s.d. of initial wavepacket
         #'sig_f':0, # s.d. in microns instead (if specified)
         'atol':1e-9, # solver tolerance
