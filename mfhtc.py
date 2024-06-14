@@ -395,18 +395,20 @@ class HTC:
         #n_kf, n_Lf, n_Uf, sigsigf, asig_kf, n_Bf = self.calculate_observables(state_f, kspace)
         return state_f
 
-    def calculate_n_photon(self, state, kspace = False):
+    def calculate_n_photon(self, a, kspace = False):
         """Calculates photonic population."""
-        a, lp, l0 = self.split_reshape_return(state) 
+        #a, lp, l0 = self.split_reshape_return(state) 
         if kspace:
-            n_k = np.outer(np.conj(a),a)*self.Nm # photon number in kspace; includes rescaling
-        else:
-            n_kk = np.conj(a)*a*self.Nm # includes rescaling
-            a_k_fft = ifft(n_kk, axis = 0, norm = 'backward') # in real space, positive exponents 
-            n_k = np.zeros((self.Nk, self.Nk), dtype=complex) # initialise array for photon population values
-            for p, k in itertools.product(range(self.Nk), range(self.Nk)): # perform k'-k transform
-                n_k[p,k] = a_k_fft[p-k] # photon number in real space
-        return n_k
+            #a = fftshift(a) # order -Q0, -Q0+1,...,0,..., +Q0 - not if want to be compatible with LP calculation
+            return np.outer(np.conj(a),a)*self.Nm # photon number in kspace; includes rescaling
+        a_r = fft(a, norm = 'ortho')
+        return np.conj(a_r) * a_r # Check
+        #else:
+        #    n_kk = np.conj(a)*a*self.Nm # includes rescaling
+        #    a_k_fft = ifft(n_kk, axis = 0, norm = 'backward') # in real space, positive exponents 
+        #    n_k = np.zeros((self.Nk, self.Nk), dtype=complex) # initialise array for photon population values
+        #    for p, k in itertools.product(range(self.Nk), range(self.Nk)): # perform k'-k transform
+        #        n_k[p,k] = a_k_fft[p-k] # photon number in real space
 
     def calculate_n_molecular(self, state, kspace = False):
         """Calculates molecular population (in real space)."""
@@ -424,7 +426,7 @@ class HTC:
         zlp = contract('i,in->n', self.consts['zetap'], lp) # zeta(i+)<lambda(i+)>
         zzlplp = np.outer(zlp, np.conj(zlp)) # zeta(i+)zeta(j+)<lambda(i+)><lambda(j-)>
         zzl0 = contract('a,an->n', self.consts['zetazeta'], l0) # zeta(i+)zeta(j+)Z(i0i+j+)<lambda(i0)>
-        delta_ij = np.eye(self.Nk)
+        #delta_ij = np.eye(self.Nk)
         #n_B = (NE - 1)*zzlplp + zzl0 + delta_ij/self.Nnu # bright exciton population
         n_B = (NE - 1)*zzlplp + zzl0 + 0.5 # bright excition population; note zzl0 + 0.5 == n_M/NE so if already computed n_M could use that
         return n_B
@@ -437,12 +439,14 @@ class HTC:
         a, lp, l0 = self.split_reshape_return(state) 
         z011 = gp.z_tensor((0,1,1))
         sNm = np.sqrt(self.Nm)
-        n_k = self.calculate_n_photon(state, kspace = True) # photonic population; includes rescaling
+        sNE = np.sqrt(self.NE)
+        n_k = self.calculate_n_photon(a, kspace = True) # photonic population; includes rescaling
         #n_M = self.calculate_n_molecular(state, kspace) # molecular population
         n_B = self.calculate_n_bright(state) # bright state population
         sig_plus = contract('i,in->n', self.consts['zetap'], lp)  # zeta(i+)<lambda(i+)>
-        post_sigp = fft(sig_plus, axis = 0, norm = 'ortho') # (in k-space, negative exponents)
-        asig_k = np.outer(a, post_sigp)*sNm # expectation value <a_k sigma(k'+)>; includes rescaling
+        post_sigp = fft(sig_plus, axis = 0, norm = 'ortho') # (in k-space, negative exponents) 
+        #asig_k = np.outer(a, post_sigp)*sNm # expectation value <a_k sigma(k'+)>; includes rescaling
+        asig_k = np.outer(a, post_sigp)*sNm*sNE # expectation value <a_k sigma(k'+)>; includes rescaling
         sigsig_k1 = np.outer(post_sigp, np.conj(post_sigp))*self.params['NE'] # first term of <sigma(k'+)sigma(k-)>
         sig_abs_sq = sig_plus * sig_plus.conj()  # zeta(i+)zeta(j+)<lambda(i+)><lambda(j-)>
         sigsig_k2 = ifft(sig_abs_sq, axis=0, norm='backward') # (in k-space, positive exponents)
@@ -453,7 +457,7 @@ class HTC:
         n_U = np.zeros((self.Nk, self.Nk), dtype=complex) # initialise array for upper polariton population values
         delta_k = np.eye(self.Nk) # equivalent to 2*Nnu*zeta(i+)zeta(j+)delta(i+,j+)
         for p, k in itertools.product(range(self.Nk), range(self.Nk)): 
-            sigsig[p,k] = sigsig_k1[k,p] - sigsig_k2[k-p] + post_l0[k-p] + (0.5/self.Nnu) * delta_k[k,p]
+            sigsig[p,k] = sigsig_k1[k,p] - sigsig_k2[k-p] + post_l0[k-p] + 0.5 * delta_k[k,p] # factor of 1/Nnu
             n_U[p,k] = self.coeffs['X_k'][p] * self.coeffs['X_k'][k] * sigsig[p,k] \
             + self.coeffs['Y_k'][p] * self.coeffs['Y_k'][k] * n_k[p,k] \
             + self.coeffs['X_k'][p] * self.coeffs['Y_k'][k] * asig_k[k,p] \
@@ -524,7 +528,7 @@ if __name__ == '__main__':
         datefmt='%H:%M')
     params = {
         'Q0': 15, # how many modes either side of K0 (or 0 for populations) to include; 2*Q0+1 modes total 
-        'Nm': 6000, # Number of molecules
+        'Nm': 31, # Number of molecules
         'Nnu': 1, # Number of vibrational levels for each molecules
         'L': 10.0, # Crystal propagation length, inverse micro meters
         'nr':1.0, # refractive index, sets effective speed of light c/nr
