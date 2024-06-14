@@ -425,7 +425,8 @@ class HTC:
         zzlplp = np.outer(zlp, np.conj(zlp)) # zeta(i+)zeta(j+)<lambda(i+)><lambda(j-)>
         zzl0 = contract('a,an->n', self.consts['zetazeta'], l0) # zeta(i+)zeta(j+)Z(i0i+j+)<lambda(i0)>
         delta_ij = np.eye(self.Nk)
-        n_B = (NE - 1)*zzlplp + zzl0 + delta_ij/self.Nnu # bright exciton population
+        #n_B = (NE - 1)*zzlplp + zzl0 + delta_ij/self.Nnu # bright exciton population
+        n_B = (NE - 1)*zzlplp + zzl0 + 0.5 # bright excition population; note zzl0 + 0.5 == n_M/NE so if already computed n_M could use that
         return n_B
 
     #def calculate_coherences(self,state):
