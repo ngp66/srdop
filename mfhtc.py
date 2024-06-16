@@ -71,7 +71,6 @@ class HTC:
             'rtol':1e-6, # solver tolerance
             'dt': 0.5, # determines interval at which solution is evaluated. Does not effect the accuracy of solution, only the grid at which observables are recorded
             #'lowpass': 0.01, # used for smoothing oscillations in observable plots
-            #'calculate_lp': False, # compute LP population for each state - adds overhead due to for-loops
             }
 
     @classmethod
@@ -93,7 +92,6 @@ class HTC:
         self.rs = self.ns * self.params['delta_r']
         self.wrapit(self.make_coeffs, f'Constructing EoM coefficients...', timeit=False)
         #self.wrapit(self.create_initial_state, f'Creating initial state...', timeit=False)
-        #self.labels = self.get_labels()
 
     def parse_params(self, params):
         if params is None:
@@ -139,6 +137,7 @@ class HTC:
         params['Nk'] = 2 * self.Q0+1 # total number of modes
         self.Nm, self.Nk, self.Nnu = params['Nm'], params['Nk'], params['Nnu']
         self.NE = self.Nm/self.Nk # Number of molecules in an ensemble
+        self.dt = params['dt']
         self.params['delta_r'] = params['L']/params['Nk'] # grid spacing in micrometers
         self.params['delta'] = round(params['epsilon'] - self.wc, 5) # detuning
         self.off_diag_indices_Nk = np.where(~np.eye(self.Nk,dtype=bool))
@@ -205,7 +204,7 @@ class HTC:
         return ret
 
     def make_coeffs(self):
-        # dictionary for equation coefficients and constants used in their construction
+        '''Dictionary for equation coefficients and constants used in their construction.'''
         coeffs, consts = {}, {}
         gp = self.gp
         params = self.params
@@ -278,7 +277,7 @@ class HTC:
         coeffs['22_10'] = 2 * contract('j,aij->ai', consts['Bp'], f011) 
         # EQ 3
         coeffs['31_00'] = 1 * consts['xi'] 
-        coeffs['32_0'] = np.broadcast_to(consts['phi0'], (Nk, self.N0)).T # cast phi to a matrix to match dimensions of other variables in the equation
+        coeffs['32_0'] = np.broadcast_to(consts['phi0'], (Nk, self.N0)).T # cast phi to a matrix to match dimensions of other variables in equation
         coeffs['33_01'] = 4 * contract('aij,i->aj', f011, consts['Bp']) 
         # Hopfield coefficients 
         consts['zeta_k'] = 0.5 * np.sqrt( (params['epsilon'] - consts['omega'])**2 + 4 * params['gSqrtN']**2 )
@@ -358,7 +357,7 @@ class HTC:
             reshaped = [np.copy(X) for X in reshaped]
         return reshaped
         
-    def eoms(self,t, state):
+    def eoms(self, t, state):
         """Equations of motion as in mf_eoms_fourier.pdf"""
         #state = self.initial_state()
         C = self.coeffs
@@ -378,11 +377,12 @@ class HTC:
         dy_state = np.concatenate((dy_a, dy_lp, dy_l0), axis=None)
         return dy_state
 
-    def quick_integration(self, tf, kspace = False):
+    def quick_integration(self, tf, ti = 0.0):
         """Integrates the equations of motion from t = 0 to tf using solve_ivp."""
         state_i = self.initial_state()
-        ivp = solve_ivp(self.eoms, [0,tf], state_i, dense_output=True)
+        ivp = solve_ivp(self.eoms, [ti,tf], state_i, dense_output=True)
         state_f = ivp.y[:,-1]
+        #state_t = ivp.t[-1]
         return state_f
 
     def calculate_n_photon(self, a, kspace = False, evolve = False):
@@ -403,7 +403,7 @@ class HTC:
             return n_M_r
         return fft(n_M_r, axis = 0, norm = 'ortho')
 
-    def calculate_n_bright_dark(self, l0, lp, kspace = False):
+    def calculate_n_bright(self, l0, lp, kspace = False):
         """Calculates population of bright exciton state (in real space)."""
         zlp = contract('i,in->n', self.consts['zetap'], lp) # zeta(i+)<lambda(i+)>
         zzlplp = np.outer(zlp, np.conj(zlp)) # zeta(i+)zeta(j+)<lambda(i+)><lambda(j-)>
@@ -413,7 +413,7 @@ class HTC:
             return n_B_r
         return fft(n_B_r, axis = 0, norm = 'ortho')
 
-    def calculate_upper_lower_polariton(self, a, lp, l0, evolve): 
+    def calculate_upper_lower_polariton(self, a, lp, l0, evolve = False): 
         """Calculate coherences <sigma_k'(+)sigma_k(-)> and <a_k sigma_k(+)>, 
         as well as upper and lower polariton populations, all in k-space."""
         gp = self.gp
@@ -448,17 +448,34 @@ class HTC:
             - self.coeffs['Y_k'][p] * self.coeffs['X_k'][k] * asig_k[k,p]
         return n_k, n_L, n_U, sigsig, asig_k
         
-    def calculate_observables(self, state, evolve = False):
+    def calculate_observables(self, state, evolve = False, tf = None):
         """Calculate coherences, polariton, photon and molecular numbers for a given state.""" 
         a, lp, l0 = self.split_reshape_return(state) 
         n_M = self.calculate_n_molecular(l0, kspace = False) # molecular population (real space)
-        n_B = self.calculate_n_bright_dark(l0, lp, kspace = False) # bright state population (real space)
-        n_k, n_L, n_U, sigsig, asig_k = self.calculate_upper_lower_polariton(a, lp, l0, evolve) # k-space
+        n_B = self.calculate_n_bright(l0, lp, kspace = False) # bright state population (real space)
+        n_k, n_L, n_U, sigsig, asig_k = self.calculate_upper_lower_polariton(a, lp, l0) # k-space, initial populations (not evolved)
+        if evolve:
+            t_fs = np.arange(0.0, tf, step = self.dt) # create array of integration times
+            n_k_arr, n_L_arr, n_U_arr, sigsig_arr, asig_k_arr, n_B_arr = ( \
+                np.zeros([len(t_fs), self.Nk, self.Nk], dtype=complex) for _ in range(6)) # create empty arrays for storing values of observables  
+            n_M_arr = np.zeros([len(t_fs), self.Nk], dtype=complex)
+            n_k_arr[0], n_M_arr[0], n_L_arr[0][:], n_U_arr[0], sigsig_arr[0], asig_k_arr[0], \
+            n_B_arr[0] = n_k, n_M, n_L, n_U, sigsig, asig_k, n_B # initial populations
+            a, lp, l0 = self.split_reshape_return(self.quick_integration(tf, ti = 0.0)) # integrate eoms from 0.0 to tf
+            n_M_arr[1] = self.calculate_n_molecular(l0, kspace = False) # (real space)
+            n_B_arr[1] = self.calculate_n_bright(l0, lp, kspace = False) # (real space)
+            n_k_arr[1], n_L_arr[1], n_U_arr[1], sigsig_arr[1], asig_k_arr[1] = self.calculate_upper_lower_polariton(a, lp, l0, evolve) # k-space
+            for i in range(len(t_fs[1:])):
+                t = t_fs[i]
+                a, lp, l0 = self.split_reshape_return(self.quick_integration(tf, ti = t_fs[i-1])) # integrate eoms from ti to tf
+                n_M_arr[i] = self.calculate_n_molecular(l0, kspace = False) # (real space)
+                n_B_arr[i] = self.calculate_n_bright(l0, lp, kspace = False) # (real space)
+                n_k_arr[i], n_L_arr[i], n_U_arr[i], sigsig_arr[i], asig_k_arr[i] = self.calculate_upper_lower_polariton(a, lp, l0, evolve) # k-space
         return n_k, n_M, n_L, n_U, sigsig, asig_k, n_B
 
-    def calculate_initial_observables(self):
+    def calculate_initial_observables(self, evolve = False, tf = None):
         state_i = self.initial_state()
-        return self.calculate_observables(state_i)
+        return self.calculate_observables(state_i, evolve, tf)
         
     def plot_initial_populations(self, savefig = False):
         n_k, n_M, n_L, n_U, sigsig, asig_k, n_B = self.calculate_initial_observables()
@@ -470,14 +487,15 @@ class HTC:
         assert np.allclose(np.diag(n_U).imag, 0.0), "Upper polariton population has imaginary components"
         assert np.allclose(np.diag(n_B).imag, 0.0), "Bright exciton population has imaginary components"
         assert np.allclose(np.diag(sigsig).imag, 0.0), "The coherences have imaginary components"
+        assert np.allclose(np.diag(asig_k).imag, 0.0), "The coherences have imaginary components"
         n_k_diag = fftshift(np.diag(n_k).real) # shift back so that k=0 component is at the center
         n_M_diag = fftshift(n_M.real) # shift back so that k=0 component is at the center        
         n_L_diag = fftshift(np.diag(n_L).real) # shift back so that k=0 component is at the center
         n_U_diag = fftshift(np.diag(n_U).real) # shift back so that k=0 component is at the center
         n_B_diag = fftshift(np.diag(n_B).real) # shift back so that k=0 component is at the center
-        n_D_diag = n_B_diag - n_M_diag # shift back so that k=0 component is at the center
-        sigsig_diag = fftshift(np.diag(sigsig).real) 
-        asig_k_diag = fftshift(np.diag(asig_k).real)
+        n_D_diag = n_B_diag - n_M_diag 
+        sigsig_diag = fftshift(np.diag(sigsig).real) # shift back so that k=0 component is at the center
+        asig_k_diag = fftshift(np.diag(asig_k).real) # shift back so that k=0 component is at the center
         fig1, ax1 = plt.subplots(5,1,figsize = (12,10),sharex = True)
         ax1[0].scatter(self.Ks, n_U_diag, marker = '.')
         ax1[0].plot(self.Ks, n_U_diag)
@@ -512,7 +530,7 @@ class HTC:
         ax2[2].plot(self.Ks, n_D_diag)
         ax2[2].set_ylabel('$n_D(r_n)$')
         ax2[2].set_xlabel('$r_n$')
-        fig2.suptitle('Initial excitonic populations in real space')
+        fig2.suptitle('Initial Excitonic Populations in Real Space')
         fig2.tight_layout(h_pad=0.2)
         if savefig:
             plt.savefig(fname = 'brightdark_populations.jpg', format = 'jpg')
@@ -546,7 +564,7 @@ if __name__ == '__main__':
         #'sig_f':0, # s.d. in microns instead (if specified)
         'atol':1e-9, # solver tolerance
         'rtol':1e-6, # solver tolerance
-        #'dt': 0.5, # determines interval at which solution is evaluated. Does not effect the accuracy of solution, only the grid at which observables are recorded
+        'dt': 0.5, # determines interval at which solution is evaluated. Does not effect the accuracy of solution, only the grid at which observables are recorded
         }
     
     htc = HTC(params)
