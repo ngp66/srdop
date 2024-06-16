@@ -266,9 +266,6 @@ class HTC:
         consts['zetap'] = gp.get_coefficients(np.kron(sp, bi), sgn=1, eye=False)
         consts['zetazeta'] = contract('i,j,aij->a', consts['zetap'],
                              consts['zetap'], z011)
-        # C^0_{i_0} and D^0 from thesis
-        coeffs['C_0'], coeffs['D_0'] = \
-                self.gp.get_coefficients(np.kron(Pauli.p1, self.boson.i), sgn=0, eye=True)
         # CIJ means Jth coeff. of Ith eqn.
         # Written in terms of rescaled a: a_tilda = a / sqrt(Nm)
         # EQ 1 
@@ -281,7 +278,7 @@ class HTC:
         coeffs['22_10'] = 2 * contract('j,aij->ai', consts['Bp'], f011) 
         # EQ 3
         coeffs['31_00'] = 1 * consts['xi'] 
-        coeffs['32_0'] = np.broadcast_to(consts['phi0'], (Nk, self.N0)).T   # cast phi to a matrix to match dimensions of other variables in the equation
+        coeffs['32_0'] = np.broadcast_to(consts['phi0'], (Nk, self.N0)).T # cast phi to a matrix to match dimensions of other variables in the equation
         coeffs['33_01'] = 4 * contract('aij,i->aj', f011, consts['Bp']) 
         # Hopfield coefficients 
         consts['zeta_k'] = 0.5 * np.sqrt( (params['epsilon'] - consts['omega'])**2 + 4 * params['gSqrtN']**2 )
@@ -344,10 +341,8 @@ class HTC:
             lp0.append(2*coeffsp0)
             coeffs00 = self.gp.get_coefficients(rho0n, sgn=0, warn=False) # lambda i0
             l00.append(2*coeffs00)
-            #a0[0][n] = 0.0 # create purely excitonic initial state
         # flatten and concatenate to match input state structure of RK (1d array)
         state = np.concatenate((a0, lp0, l00), axis=None)
-        #print('Initial state contains only excitonic component')
         assert len(state) == self.state_length, 'Initial state does not match the required dimensions'
         return state
 
@@ -391,7 +386,7 @@ class HTC:
         return state_f
 
     def calculate_n_photon(self, a, kspace = False, evolve = False):
-        """Calculates photonic population."""
+        """Calculates photonic population. Use evolve = True to get correct normalisation if evolving the state in time."""
         if kspace:
             if evolve:
                 return np.outer(np.conj(a),a)*self.Nm # photon number in kspace; includes rescaling - function should be passed to eoms
@@ -402,31 +397,30 @@ class HTC:
 
     def calculate_n_molecular(self, l0, kspace = False):
         """Calculates molecular population (in real space)."""
-        n_M = self.NE * (contract('a,an->n', self.coeffs['C_0'], l0) + self.coeffs['D_0']) # in real space
-        #if kspace:
-        #    n_M = fft(n_M, axis = 0, norm = 'backward') # in k-space; normalisation?
-        return n_M
+        zzl0 = contract('a,an->n', self.consts['zetazeta'], l0) # zeta(i+)zeta(j+)Z(i0i+j+)<lambda(i0)>
+        n_M_r = (zzl0 + 0.5)*self.NE
+        if not kspace:
+            return n_M_r
+        return fft(n_M_r, axis = 0, norm = 'ortho')
 
-    def calculate_n_bright(self, l0, lp):
+    def calculate_n_bright_dark(self, l0, lp, kspace = False):
         """Calculates population of bright exciton state (in real space)."""
         zlp = contract('i,in->n', self.consts['zetap'], lp) # zeta(i+)<lambda(i+)>
         zzlplp = np.outer(zlp, np.conj(zlp)) # zeta(i+)zeta(j+)<lambda(i+)><lambda(j-)>
-        zzl0 = contract('a,an->n', self.consts['zetazeta'], l0) # zeta(i+)zeta(j+)Z(i0i+j+)<lambda(i0)>
-        n_B = (self.NE - 1)*zzlplp + zzl0 + 0.5 # bright excition population; note zzl0 + 0.5 == n_M/NE so if already computed n_M could use that
-        return n_B
+        n_M = self.calculate_n_molecular(l0)
+        n_B_r = (self.NE - 1)*zzlplp + n_M/self.NE 
+        if not kspace:
+            return n_B_r
+        return fft(n_B_r, axis = 0, norm = 'ortho')
 
-    #def calculate_coherences(self,state):
-        
-    def calculate_observables(self, state, evolve = False):
-        """Calculate polariton, photon and molecular numbers for a given state.""" 
+    def calculate_upper_lower_polariton(self, a, lp, l0, evolve): 
+        """Calculate coherences <sigma_k'(+)sigma_k(-)> and <a_k sigma_k(+)>, 
+        as well as upper and lower polariton populations, all in k-space."""
         gp = self.gp
-        a, lp, l0 = self.split_reshape_return(state) 
         z011 = gp.z_tensor((0,1,1))
         sNm = np.sqrt(self.Nm)
         sNE = np.sqrt(self.NE)
-        n_k = self.calculate_n_photon(a, kspace = True, evolve = False) # photonic population; includes rescaling
-        #n_M = self.calculate_n_molecular(l0, kspace) # molecular population
-        n_B = self.calculate_n_bright(l0, lp) # bright state population
+        n_k = self.calculate_n_photon(a, kspace = True) # photonic population, no rescaling (initial state)
         sig_plus = contract('i,in->n', self.consts['zetap'], lp)  # zeta(i+)<lambda(i+)>
         post_sigp = fft(sig_plus, axis = 0, norm = 'ortho') # (in k-space, negative exponents) 
         if evolve:
@@ -443,7 +437,7 @@ class HTC:
         n_U = np.zeros((self.Nk, self.Nk), dtype=complex) # initialise array for upper polariton population values
         delta_k = np.eye(self.Nk) # equivalent to 2*Nnu*zeta(i+)zeta(j+)delta(i+,j+)
         for p, k in itertools.product(range(self.Nk), range(self.Nk)): 
-            sigsig[p,k] = sigsig_k1[k,p] - sigsig_k2[k-p] + post_l0[k-p] + 0.5 * delta_k[k,p] # factor of 1/Nnu
+            sigsig[p,k] = sigsig_k1[k,p] - sigsig_k2[k-p] + post_l0[k-p] + 0.5 * delta_k[k,p]
             n_U[p,k] = self.coeffs['X_k'][p] * self.coeffs['X_k'][k] * sigsig[p,k] \
             + self.coeffs['Y_k'][p] * self.coeffs['Y_k'][k] * n_k[p,k] \
             + self.coeffs['X_k'][p] * self.coeffs['Y_k'][k] * asig_k[k,p] \
@@ -452,29 +446,36 @@ class HTC:
             + self.coeffs['Y_k'][p] * self.coeffs['Y_k'][k] * sigsig[p,k] \
             - self.coeffs['X_k'][p] * self.coeffs['Y_k'][k] * np.conj(asig_k[p,k]) \
             - self.coeffs['Y_k'][p] * self.coeffs['X_k'][k] * asig_k[k,p]
-        return n_k, n_L, n_U, sigsig, asig_k, n_B
+        return n_k, n_L, n_U, sigsig, asig_k
+        
+    def calculate_observables(self, state, evolve = False):
+        """Calculate coherences, polariton, photon and molecular numbers for a given state.""" 
+        a, lp, l0 = self.split_reshape_return(state) 
+        n_M = self.calculate_n_molecular(l0, kspace = False) # molecular population (real space)
+        n_B = self.calculate_n_bright_dark(l0, lp, kspace = False) # bright state population (real space)
+        n_k, n_L, n_U, sigsig, asig_k = self.calculate_upper_lower_polariton(a, lp, l0, evolve) # k-space
+        return n_k, n_M, n_L, n_U, sigsig, asig_k, n_B
 
     def calculate_initial_observables(self):
         state_i = self.initial_state()
-        n_ki, n_Li, n_Ui, sigsigi, asig_ki, n_Bi = self.calculate_observables(state_i)
-        return n_ki, n_Li, n_Ui, sigsigi, asig_ki, n_Bi
+        return self.calculate_observables(state_i)
         
-    def plot_n_L(self, savefig = False):
-        n_k, n_L, n_U, sigsig, asig_k, n_B = self.calculate_initial_observables()
-        #print(n_k)
-        assert np.allclose(np.diag(sigsig).real + np.diag(n_k).real - np.diag(n_L).real \
-                           - np.diag(n_U).real, 0.0), "Polariton population not equal to sum of molecular and photon populations"
-        #assert np.allclose(np.diag(n_M).imag, 0.0), "Molecular population has imaginary components"
+    def plot_initial_populations(self, savefig = False):
+        n_k, n_M, n_L, n_U, sigsig, asig_k, n_B = self.calculate_initial_observables()
+        #assert np.allclose(np.diag(sigsig).real + np.diag(n_k).real - np.diag(n_L).real \
+        #                   - np.diag(n_U).real, 0.0), "Polariton population not equal to sum of molecular and photon populations"
+        assert np.allclose(np.diag(n_M).imag, 0.0), "Molecular population has imaginary components"
         assert np.allclose(np.diag(n_k).imag, 0.0), "Photon population has imaginary components"
         assert np.allclose(np.diag(n_L).imag, 0.0), "Lower polariton population has imaginary components"
         assert np.allclose(np.diag(n_U).imag, 0.0), "Upper polariton population has imaginary components"
         assert np.allclose(np.diag(n_B).imag, 0.0), "Bright exciton population has imaginary components"
         assert np.allclose(np.diag(sigsig).imag, 0.0), "The coherences have imaginary components"
-        n_U_diag = fftshift(np.diag(n_U).real) # shift back so that k=0 component is at the center
-        n_L_diag = fftshift(np.diag(n_L).real) # shift back so that k=0 component is at the center
         n_k_diag = fftshift(np.diag(n_k).real) # shift back so that k=0 component is at the center
+        n_M_diag = fftshift(n_M.real) # shift back so that k=0 component is at the center        
+        n_L_diag = fftshift(np.diag(n_L).real) # shift back so that k=0 component is at the center
+        n_U_diag = fftshift(np.diag(n_U).real) # shift back so that k=0 component is at the center
         n_B_diag = fftshift(np.diag(n_B).real) # shift back so that k=0 component is at the center
-        #n_M = fftshift(n_M.real)
+        n_D_diag = n_B_diag - n_M_diag # shift back so that k=0 component is at the center
         sigsig_diag = fftshift(np.diag(sigsig).real) 
         asig_k_diag = fftshift(np.diag(asig_k).real)
         fig1, ax1 = plt.subplots(5,1,figsize = (12,10),sharex = True)
@@ -489,23 +490,32 @@ class HTC:
         ax1[2].set_ylabel('$n_k(k)$')
         ax1[3].scatter(self.Ks, sigsig_diag, marker = '.')
         ax1[3].plot(self.Ks, sigsig_diag)
-        ax1[3].set_ylabel('$< \sigma_{k\prime}^{+} \sigma_k^{-}>$') #n_m(k)
+        ax1[3].set_ylabel('$< \sigma_{k\prime}^{+} \sigma_k^{-}>$')
         ax1[4].scatter(self.Ks, asig_k_diag, marker = '.')
         ax1[4].plot(self.Ks, asig_k_diag)
         ax1[4].set_xlabel('$k$')
-        ax1[4].set_ylabel('$< a_{k\prime} \sigma_k^{+}>$')
+        ax1[4].set_ylabel('$< a_k \sigma_k^{+}>$')
         fig1.suptitle('Initial Populations and Coherences in k-space')
         fig1.tight_layout(h_pad=0.2)
         if savefig:
             plt.savefig(fname = 'state_i.jpg', format = 'jpg')
-        fig2, ax2 = plt.subplots(1,1,figsize = (12,2))#,sharex = True)                
-        ax2.scatter(self.Ks, n_B_diag, marker = '.')
-        ax2.plot(self.Ks, n_B_diag)
-        ax2.set_ylabel('$n_B(r_n)$') # in real space!!!!!!!!
-        ax2.set_xlabel('$r_n$')
+        fig2, ax2 = plt.subplots(3,1,figsize = (12,6),sharex = True)                
+        ax2[0].scatter(self.Ks, n_M_diag, marker = '.')
+        ax2[0].plot(self.Ks, n_M_diag)
+        ax2[0].set_ylabel('$n_M(r_n)$')
+        ax2[0].set_xlabel('$r_n$')
+        ax2[1].scatter(self.Ks, n_B_diag, marker = '.')
+        ax2[1].plot(self.Ks, n_B_diag)
+        ax2[1].set_ylabel('$n_B(r_n)$')
+        ax2[1].set_xlabel('$r_n$')
+        ax2[2].scatter(self.Ks, n_D_diag, marker = '.')
+        ax2[2].plot(self.Ks, n_D_diag)
+        ax2[2].set_ylabel('$n_D(r_n)$')
+        ax2[2].set_xlabel('$r_n$')
+        fig2.suptitle('Initial excitonic populations in real space')
         fig2.tight_layout(h_pad=0.2)
         if savefig:
-            plt.savefig(fname = 'bright_population.jpg', format = 'jpg')
+            plt.savefig(fname = 'brightdark_populations.jpg', format = 'jpg')
             
 if __name__ == '__main__':
     logging.basicConfig(
@@ -541,4 +551,4 @@ if __name__ == '__main__':
     
     htc = HTC(params)
     htc.quick_integration(100)
-    htc.plot_n_L()
+    htc.plot_initial_populations()
