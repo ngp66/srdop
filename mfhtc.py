@@ -493,7 +493,7 @@ class HTC:
         n_L_diag = fftshift(np.diag(n_L).real) # shift back so that k=0 component is at the center
         n_U_diag = fftshift(np.diag(n_U).real) # shift back so that k=0 component is at the center
         n_B_diag = fftshift(np.diag(n_B).real) # shift back so that k=0 component is at the center
-        n_D_diag = n_B_diag - n_M_diag 
+        n_D_diag = n_M_diag - n_B_diag
         sigsig_diag = fftshift(np.diag(sigsig).real) # shift back so that k=0 component is at the center
         asig_k_diag = fftshift(np.diag(asig_k).real) # shift back so that k=0 component is at the center
         fig1, ax1 = plt.subplots(5,1,figsize = (12,10),sharex = True)
