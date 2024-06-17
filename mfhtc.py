@@ -329,10 +329,10 @@ class HTC:
         TLS_matrix = np.array([[0.0,0.0],[0.0,1.0]]) # initially in ground state
         a0, lp0, l00 = [], [], [] 
         a0.append(alpha_k*self.coeffs['X_k']) # expectation values of initial a_k (not rescaled)
+        beta_n = fft(-alpha_k*self.coeffs['Y_k'], axis=0, norm='ortho')  
+        beta_n /= np.sqrt(self.NE) # corrected normalisation
         for n in range(self.Nk):
-            beta_n = fft(-alpha_k*self.coeffs['Y_k'], axis=0, norm='ortho')[n]  
-            beta_n /= np.sqrt(self.NE) # corrected normalisation
-            U_n = expm(np.array([[0.0, beta_n],[-np.conj(beta_n), 0.0]]))
+            U_n = expm(np.array([[0.0, beta_n[n]],[-np.conj(beta_n[n]), 0.0]]))
             U_n_dag = U_n.conj().T
             exciton_matrix_n = U_n @ TLS_matrix @ U_n_dag # initial exciton matrix
             rho0n = np.kron(exciton_matrix_n, rho0_vib) # total density operator
