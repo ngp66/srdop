@@ -331,7 +331,7 @@ class HTC:
         a0.append(alpha_k*self.coeffs['X_k']) # expectation values of initial a_k (not rescaled)
         for n in range(self.Nk):
             beta_n = fft(-alpha_k*self.coeffs['Y_k'], axis=0, norm='ortho')[n]  
-            beta_n *= self.NE # is the normalisation correct? Nm rather than Nk
+            beta_n /= np.sqrt(self.NE) # corrected normalisation
             U_n = expm(np.array([[0.0, beta_n],[-np.conj(beta_n), 0.0]]))
             U_n_dag = U_n.conj().T
             exciton_matrix_n = U_n @ TLS_matrix @ U_n_dag # initial exciton matrix
