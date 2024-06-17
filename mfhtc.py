@@ -336,7 +336,7 @@ class HTC:
             U_n_dag = U_n.conj().T
             exciton_matrix_n = U_n @ TLS_matrix @ U_n_dag # initial exciton matrix
             rho0n = np.kron(exciton_matrix_n, rho0_vib) # total density operator
-            coeffsp0 = self.gp.get_coefficients(rho0n, sgn=1, warn=False) # lambda i+
+            coeffsp0 = self.gp.get_coefficients(rho0n, sgn=-1, warn=False) # lambda i+
             lp0.append(2*coeffsp0)
             coeffs00 = self.gp.get_coefficients(rho0n, sgn=0, warn=False) # lambda i0
             l00.append(2*coeffs00)
