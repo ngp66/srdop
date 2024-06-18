@@ -521,7 +521,7 @@ class HTC:
             assert len(n_D_arr) == self.Nk*(len(t_fs)), 'Length of evolved dark exciton population array does not have the required dimensions'
         return t_fs, n_k_arr, n_M_arr, n_B_arr, n_D_arr, sigsig_arr #n_L_arr, n_U_arr, sigsig_arr, asig_k_arr
                 
-    def plot_evolution(self, savefig = False, tf = 1.0, fixed_position_index = 6, savefig = False):
+    def plot_evolution(self, savefig = False, tf = 1.0, fixed_position_index = 6):
         times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, sigsig_arr = self.calculate_evolved_observables(tf, fixed_position_index)
         fig, ax = plt.subplots(1,1,figsize = (6,4))
         ax.plot(times, sigsig_arr, label = '$n_{B}$')
