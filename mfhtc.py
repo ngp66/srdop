@@ -379,11 +379,11 @@ class HTC:
         dy_state = np.concatenate((dy_a, dy_lp, dy_l0), axis=None)
         return dy_state
 
-    def quick_integration(self, tf, ti = 0.0):
+    def quick_integration(self, state, tf, ti = 0.0):
         """Integrates the equations of motion from t = 0 to tf using solve_ivp."""
         assert tf > ti, 'Final time is smaller than initial time'
-        state_i = self.initial_state()
-        ivp = solve_ivp(self.eoms, [ti,tf], state_i, dense_output=True)
+        #state_i = self.initial_state()
+        ivp = solve_ivp(self.eoms, [ti,tf], state, dense_output=True)
         state_f = ivp.y[:,-1]
         #state_t = ivp.t[-1]
         return state_f
@@ -471,7 +471,6 @@ class HTC:
         n_D_diag = n_M_diag - n_B_diag
         sigsig_diag = fftshift(np.diag(sigsig).real) # shift back so that k=0 component is at the center
         asig_k_diag = fftshift(np.diag(asig_k).real) # shift back so that k=0 component is at the center
-        #print(n_k_diag)
         return n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag
 
     def calculate_evolved_observables(self, tf = None, fixed_position_index = None):
@@ -488,9 +487,10 @@ class HTC:
             n_D_arr = n_D_arr[fixed_position_index]
             sigsig_arr = sigsig_arr[fixed_position_index]
             asig_k_arr = asig_k_arr[fixed_position_index]
+        state = self.initial_state()
         for i in range(len(t_fs)-1):
             print('Step t_i =', t_fs[i], 't_f =', t_fs[i+1])
-            state = self.quick_integration(tf = t_fs[i+1], ti = t_fs[i]) # integrate eoms from ti to tf
+            state = self.quick_integration(state, tf = t_fs[i+1], ti = t_fs[i]) # integrate eoms from ti to tf
             n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag = self.calculate_diagonal_elements(state)
             if fixed_position_index != None: # append with observables at each time step 
                 n_k_arr = np.append(n_k_arr, n_k_diag[fixed_position_index])
@@ -521,16 +521,16 @@ class HTC:
                 
     def plot_evolution(self, savefig = False, tf = 1.0, fixed_position_index = 6):
         times, n_k_arr, n_M_arr, n_B_arr, n_D_arr = self.calculate_evolved_observables(tf, fixed_position_index)
-        print(n_k_arr)
+        #print(n_M_arr)
         fig, ax = plt.subplots(1,1,figsize = (6,4))
-        ax.plot(times, n_k_arr)
-        ax.scatter(times, n_k_arr)
+        ax.plot(times, n_M_arr)
+        ax.scatter(times, n_M_arr)
         ax.set_xlabel('time')
         
     def plot_initial_populations(self, savefig = False):
         state_i = self.initial_state()
         n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag = self.calculate_diagonal_elements(state_i)
-        print(n_k_diag[18])
+        print(n_M_diag[18])
         fig1, ax1 = plt.subplots(5,1,figsize = (12,10),sharex = True)
         ax1[0].scatter(self.Ks, n_U_diag, marker = '.')
         ax1[0].plot(self.Ks, n_U_diag)
