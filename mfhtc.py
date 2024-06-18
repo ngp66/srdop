@@ -615,3 +615,4 @@ if __name__ == '__main__':
     htc = HTC(params)
     htc.quick_integration(100)
     htc.plot_initial_populations()
+    htc.plot_evolution(tf = 100.1, fixed_position_index = 16)
