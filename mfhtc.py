@@ -587,32 +587,32 @@ if __name__ == '__main__':
         datefmt='%H:%M')
     params = {
         'Q0': 15, # how many modes either side of K0 (or 0 for populations) to include; 2*Q0+1 modes total 
-        'Nm': 31, # Number of molecules
+        'Nm': 6002, # Number of molecules
         'Nnu': 1, # Number of vibrational levels for each molecules
         'L': 10.0, # Crystal propagation length, inverse micro meters
-        'nr':1.0, # refractive index, sets effective speed of light c/nr
-        'omega_c':1.94, # omega_0 = 1.94eV (Fig S4C)
-        'epsilon':2.14, # exciton energy, detuning omega_0-epsilon (0.2eV for model I in Xu et al. 2023)
-        'gSqrtN':0.15, # light-matter coupling
-        'kappa_c':3e-3, # photon loss
-        'Gam_z':0.0, # molecular pure dephasing
-        'Gam_up':0.0, # molecular pumping
-        'Gam_down':1e-7, # molecular loss
-        'S':0.0, # Huang-Rhys parameter
-        'omega_nu':0.00647, # vibrational energy spacing
-        'T':0.026, # k_B T in eV (.0259=300K, .026=302K)
-        'gam_nu':0.01, # vibrational damping rate
+        'nr': 1.0, # refractive index, sets effective speed of light c/nr
+        'omega_c': 1.94, # omega_0 = 1.94eV (Fig S4C)
+        'epsilon': 0.0, #2.14, # exciton energy, detuning omega_0-epsilon (0.2eV for model I in Xu et al. 2023)
+        'gSqrtN': 0.15, # light-matter coupling
+        'kappa_c': 3e-3, # photon loss
+        'Gam_z': 0.0, # molecular pure dephasing
+        'Gam_up': 0.0, # molecular pumping
+        'Gam_down': 0.0, #1e-7, # molecular loss
+        'S': 0.0, # Huang-Rhys parameter
+        'omega_nu': 0.00647, # vibrational energy spacing
+        'T': 0.026, # k_B T in eV (.0259=300K, .026=302K)
+        'gam_nu': 0.0, #0.01, # vibrational damping rate
         'initial_state': 'incoherent', # or incoherent
         'A': 0.8, # amplitude of initial wavepacket
         'k_0': 0.0, # central wavenumber of initial wavepacket
         'sig_0': 4.0, # s.d. of initial wavepacket
-        #'sig_f':0, # s.d. in microns instead (if specified)
-        'atol':1e-9, # solver tolerance
-        'rtol':1e-6, # solver tolerance
+        'atol': 1e-9, # solver tolerance
+        'rtol': 1e-6, # solver tolerance
         'dt': 0.5, # determines interval at which solution is evaluated. Does not effect the accuracy of solution, only the grid at which observables are recorded
         }
     
     htc = HTC(params)
     htc.quick_integration(100)
-    htc.plot_initial_populations()
+    #htc.calculate_evolved_observables(tf = 2.1, fixed_position_index = 5)
     htc.plot_evolution(tf = 100.1, fixed_position_index = 16)
+    htc.plot_initial_populations()
