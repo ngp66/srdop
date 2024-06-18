@@ -286,9 +286,11 @@ class HTC:
         assert np.allclose(coeffs['X_k']**2+coeffs['Y_k']**2, 1.0), 'Hopfield coeffs. not normalised'
         self.consts, self.coeffs = consts, coeffs  
         
-    def omega(self, K):
+    def omega(self, K, pure_exciton = False):
         # dispersion to match MODEL used by Xu et al. 2023 (self.K_factor set in
         # self.add_useful_params)
+        if pure_exciton:
+            return np.zeros_like(K)
         return self.wc * np.sqrt(1 + self.K_factor**2 * K**2)
 
     def kappa(self, K):
@@ -340,6 +342,7 @@ class HTC:
             lp0.append(2*coeffsp0)
             coeffs00 = self.gp.get_coefficients(rho0n, sgn=0, warn=False) # lambda i0
             l00.append(2*coeffs00)
+        a0 /= np.sqrt(self.Nm) # rescale initial state (a -> a-tilda)
         # flatten and concatenate to match input state structure of RK (1d array)
         state = np.concatenate((a0, lp0, l00), axis=None)
         assert len(state) == self.state_length, 'Initial state does not match the required dimensions'
@@ -362,7 +365,6 @@ class HTC:
         #state = self.initial_state()
         C = self.coeffs
         a, lp, l0 = self.split_reshape_return(state) 
-        a /= np.sqrt(self.Nm) # rescale initial state (a -> a-tilda)
         # Calculate DFT
         alpha = ifft(a, axis=0, norm = 'forward')
         # EQ 1 
@@ -379,19 +381,17 @@ class HTC:
 
     def quick_integration(self, tf, ti = 0.0):
         """Integrates the equations of motion from t = 0 to tf using solve_ivp."""
+        assert tf > ti, 'Final time is smaller than initial time'
         state_i = self.initial_state()
         ivp = solve_ivp(self.eoms, [ti,tf], state_i, dense_output=True)
         state_f = ivp.y[:,-1]
         #state_t = ivp.t[-1]
         return state_f
 
-    def calculate_n_photon(self, a, evolve = False, kspace = False):
+    def calculate_n_photon(self, a, kspace = False):
         """Calculates photonic population. Use evolve = True to get correct normalisation if evolving the state in time."""
         if kspace:
-            if evolve:
-                return np.outer(np.conj(a),a)*self.Nm # photon number in kspace; includes rescaling - function should be passed to eoms
-            else:
-                return np.outer(np.conj(a),a) # no rescaling as function not passed to eoms
+            return np.outer(np.conj(a),a)*self.Nm # no rescaling as function not passed to eoms
         a_r = fft(a, norm = 'ortho')
         return np.conj(a_r) * a_r # Check
 
@@ -413,20 +413,17 @@ class HTC:
             return n_B_r
         return fft(n_B_r, axis = 0, norm = 'ortho')
 
-    def calculate_upper_lower_polariton(self, a, lp, l0, evolve = False): 
+    def calculate_upper_lower_polariton(self, a, lp, l0): 
         """Calculate coherences <sigma_k'(+)sigma_k(-)> and <a_k sigma_k(+)>, 
         as well as upper and lower polariton populations, all in k-space."""
         gp = self.gp
         z011 = gp.z_tensor((0,1,1))
         sNm = np.sqrt(self.Nm)
         sNE = np.sqrt(self.NE)
-        n_k = self.calculate_n_photon(a, evolve, kspace = True) # photonic population, no rescaling (initial state)
+        n_k = self.calculate_n_photon(a, kspace = True) # photonic population, no rescaling (initial state)
         sig_plus = contract('i,in->n', self.consts['zetap'], lp)  # zeta(i+)<lambda(i+)>
         post_sigp = fft(sig_plus, axis = 0, norm = 'ortho') # (in k-space, negative exponents) 
-        if evolve:
-            asig_k = np.outer(a, post_sigp)*sNm*sNE # expectation value <a_k sigma(k'+)>; includes rescaling
-        else:
-            asig_k = np.outer(a, post_sigp)*sNE # expectation value <a_k sigma(k'+)>; includes rescaling
+        asig_k = np.outer(a, post_sigp)*sNm*sNE # expectation value <a_k sigma(k'+)>; includes rescaling
         sigsig_k1 = np.outer(post_sigp, np.conj(post_sigp))*self.NE # first term of <sigma(k'+)sigma(k-)>
         sig_abs_sq = sig_plus * sig_plus.conj()  # zeta(i+)zeta(j+)<lambda(i+)><lambda(j-)>
         sigsig_k2 = ifft(sig_abs_sq, axis=0, norm='backward') # (in k-space, positive exponents)
@@ -448,17 +445,17 @@ class HTC:
             - self.coeffs['Y_k'][p] * self.coeffs['X_k'][k] * asig_k[k,p]
         return n_k, n_L, n_U, sigsig, asig_k
         
-    def calculate_observables(self, state, evolve = False):
+    def calculate_observables(self, state):
         """Calculate coherences, polariton, photon and molecular numbers for a given state.""" 
         a, lp, l0 = self.split_reshape_return(state) 
         n_M = self.calculate_n_molecular(l0, kspace = False) # molecular population (real space)
         n_B = self.calculate_n_bright(l0, lp, kspace = False) # bright state population (real space)
-        n_k, n_L, n_U, sigsig, asig_k = self.calculate_upper_lower_polariton(a, lp, l0, evolve) # k-space, initial populations (not evolved)
+        n_k, n_L, n_U, sigsig, asig_k = self.calculate_upper_lower_polariton(a, lp, l0) # k-space, initial populations (not evolved)
         return n_k, n_M, n_L, n_U, sigsig, asig_k, n_B
 
-    def calculate_diagonal_elements(self, state, evolve = False):
+    def calculate_diagonal_elements(self, state):
         #state_i = self.initial_state()
-        n_k, n_M, n_L, n_U, sigsig, asig_k, n_B = self.calculate_observables(state, evolve)
+        n_k, n_M, n_L, n_U, sigsig, asig_k, n_B = self.calculate_observables(state)
         assert np.allclose(np.diag(n_M).imag, 0.0), "Molecular population has imaginary components"
         assert np.allclose(np.diag(n_k).imag, 0.0), "Photon population has imaginary components"
         assert np.allclose(np.diag(n_L).imag, 0.0), "Lower polariton population has imaginary components"
@@ -474,37 +471,66 @@ class HTC:
         n_D_diag = n_M_diag - n_B_diag
         sigsig_diag = fftshift(np.diag(sigsig).real) # shift back so that k=0 component is at the center
         asig_k_diag = fftshift(np.diag(asig_k).real) # shift back so that k=0 component is at the center
+        #print(n_k_diag)
         return n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag
 
-    def calculate_evolved_observables(self, tf = None):
+    def calculate_evolved_observables(self, tf = None, fixed_position_index = None):
         t_fs = np.arange(0.0, tf, step = self.dt) # create array of integration times
-        n_k_arr, n_M_arr, n_L_arr, n_U_arr, sigsig_arr, asig_k_arr, n_B_arr, n_D_arr = [np.array([]) for _ in range(8)] # create empty arrays for storing values of observables  
+        #n_k_arr, n_M_arr, n_L_arr, n_U_arr, sigsig_arr, asig_k_arr, n_B_arr, n_D_arr = [np.array([]) for _ in range(8)] # create empty arrays for storing values of observables  
+        state_i = self.initial_state()
+        n_k_arr, n_M_arr, n_L_arr, n_U_arr, sigsig_arr, asig_k_arr, n_B_arr, n_D_arr = self.calculate_diagonal_elements(state_i) #initial state
+        if fixed_position_index != None:
+            n_k_arr = n_k_arr[fixed_position_index]
+            n_M_arr = n_M_arr[fixed_position_index]
+            n_L_arr = n_L_arr[fixed_position_index]
+            n_U_arr = n_U_arr[fixed_position_index]
+            n_B_arr = n_B_arr[fixed_position_index]
+            n_D_arr = n_D_arr[fixed_position_index]
+            sigsig_arr = sigsig_arr[fixed_position_index]
+            asig_k_arr = asig_k_arr[fixed_position_index]
         for i in range(len(t_fs)-1):
             print('Step t_i =', t_fs[i], 't_f =', t_fs[i+1])
             state = self.quick_integration(tf = t_fs[i+1], ti = t_fs[i]) # integrate eoms from ti to tf
-            n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag = self.calculate_diagonal_elements(state, evolve = True)
-            n_k_arr = np.append(n_k_arr, n_k_diag)
-            n_M_arr = np.append(n_M_arr, n_M_diag)
-            n_L_arr = np.append(n_L_arr, n_L_diag)
-            n_U_arr = np.append(n_U_arr, n_U_diag)
-            n_B_arr = np.append(n_B_arr, n_B_diag)
-            n_D_arr = np.append(n_D_arr, n_D_diag)
-            sigsig_arr = np.append(sigsig_arr, sigsig_diag)
-            asig_k_arr = np.append(asig_k_arr, asig_k_diag)
-        assert len(n_k_arr) == self.Nk*(len(t_fs)-1), 'Length of evolved photonic population array does not have the required dimensions'
-        assert len(n_M_arr) == self.Nk*(len(t_fs)-1), 'Length of evolved molecular population array does not have the required dimensions'
-        assert len(n_L_arr) == self.Nk*(len(t_fs)-1), 'Length of evolved lower polariton population array does not have the required dimensions'
-        assert len(n_U_arr) == self.Nk*(len(t_fs)-1), 'Length of evolved upper polariton population array does not have the required dimensions'
-        assert len(n_B_arr) == self.Nk*(len(t_fs)-1), 'Length of evolved bright exciton population array does not have the required dimensions'
-        assert len(n_D_arr) == self.Nk*(len(t_fs)-1), 'Length of evolved dark exciton population array does not have the required dimensions'
-        return n_k_arr, n_M_arr, n_B_arr, n_D_arr #, n_L_arr, n_U_arr, sigsig_arr, asig_k_arr
+            n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag = self.calculate_diagonal_elements(state)
+            if fixed_position_index != None: # append with observables at each time step 
+                n_k_arr = np.append(n_k_arr, n_k_diag[fixed_position_index])
+                n_M_arr = np.append(n_M_arr, n_M_diag[fixed_position_index])
+                n_L_arr = np.append(n_L_arr, n_L_diag[fixed_position_index])
+                n_U_arr = np.append(n_U_arr, n_U_diag[fixed_position_index])
+                n_B_arr = np.append(n_B_arr, n_B_diag[fixed_position_index])
+                n_D_arr = np.append(n_D_arr, n_D_diag[fixed_position_index])
+                sigsig_arr = np.append(sigsig_arr, sigsig_diag[fixed_position_index])
+                asig_k_arr = np.append(asig_k_arr, asig_k_diag[fixed_position_index])
+            else:
+                n_k_arr = np.append(n_k_arr, n_k_diag)
+                n_M_arr = np.append(n_M_arr, n_M_diag)
+                n_L_arr = np.append(n_L_arr, n_L_diag)
+                n_U_arr = np.append(n_U_arr, n_U_diag)
+                n_B_arr = np.append(n_B_arr, n_B_diag)
+                n_D_arr = np.append(n_D_arr, n_D_diag)
+                sigsig_arr = np.append(sigsig_arr, sigsig_diag)
+                asig_k_arr = np.append(asig_k_arr, asig_k_diag)
+        if fixed_position_index == None:
+            assert len(n_k_arr) == self.Nk*(len(t_fs)), 'Length of evolved photonic population array does not have the required dimensions'
+            assert len(n_M_arr) == self.Nk*(len(t_fs)), 'Length of evolved molecular population array does not have the required dimensions'
+            assert len(n_L_arr) == self.Nk*(len(t_fs)), 'Length of evolved lower polariton population array does not have the required dimensions'
+            assert len(n_U_arr) == self.Nk*(len(t_fs)), 'Length of evolved upper polariton population array does not have the required dimensions'
+            assert len(n_B_arr) == self.Nk*(len(t_fs)), 'Length of evolved bright exciton population array does not have the required dimensions'
+            assert len(n_D_arr) == self.Nk*(len(t_fs)), 'Length of evolved dark exciton population array does not have the required dimensions'
+        return t_fs, n_k_arr, n_M_arr, n_B_arr, n_D_arr #, n_L_arr, n_U_arr, sigsig_arr, asig_k_arr
                 
-    #def plot_evolution(self, savefig = False, tf = 1.0):
-    #    n_k_arr, n_M_arr, n_B_arr, n_D_arr = self.calculate_evolved_observables(self, tf = tf)
+    def plot_evolution(self, savefig = False, tf = 1.0, fixed_position_index = 6):
+        times, n_k_arr, n_M_arr, n_B_arr, n_D_arr = self.calculate_evolved_observables(tf, fixed_position_index)
+        print(n_k_arr)
+        fig, ax = plt.subplots(1,1,figsize = (6,4))
+        ax.plot(times, n_k_arr)
+        ax.scatter(times, n_k_arr)
+        ax.set_xlabel('time')
         
     def plot_initial_populations(self, savefig = False):
         state_i = self.initial_state()
         n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag = self.calculate_diagonal_elements(state_i)
+        print(n_k_diag[18])
         fig1, ax1 = plt.subplots(5,1,figsize = (12,10),sharex = True)
         ax1[0].scatter(self.Ks, n_U_diag, marker = '.')
         ax1[0].plot(self.Ks, n_U_diag)
