@@ -556,7 +556,6 @@ class HTC:
         #x.scatter(times, n_D_arr, marker = '.')
         ax.set_xlabel('time')
         ax.set_ylabel(f'n(k={self.Ks[fixed_position_index]})')
-        #f'pi on 2 decimals is: {pi:.2f}'
         ax.legend()
         ax.set_title('Photonic and Excitonic Population Evolution over Time')
         if savefig:
@@ -579,7 +578,6 @@ class HTC:
             n_arr = n_L_arr
             ax.set_zlabel('$n_{L}(r_n)$')
         assert isinstance(n_arr, np.ndarray), "Please, specify one of n_L, n_B and n_k"
-
         for i in range(len(slices)):
             index = np.where(times == slices[i])
             n_i = n_arr[i*self.Nk:(i+1)*self.Nk]
@@ -681,3 +679,4 @@ if __name__ == '__main__':
     #htc.calculate_evolved_observables(tf = 2.1, fixed_position_index = 5)
     htc.plot_evolution(tf = 100.1, savefig = True, fixed_position_index = 16, kspace = False)
     htc.plot_initial_populations(kspace = False)
+    htc.plot_waterfall(legend = True, n_L = True)
