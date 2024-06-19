@@ -40,7 +40,7 @@ sns.set_theme(context='notebook', style='ticks', palette='colorblind6', # 'color
                   }
               )
 
-class HTC1:
+class HTC:
     COLORS = plt.rcParams['axes.prop_cycle'].by_key()['color'] 
     EV_TO_FS = (constants.hbar/constants.e)*1e15 # convert time in electronvolts to time in fs
     DEFAULT_DIRS = {'data':'./data', 'figures':'./figures'} # output directories
@@ -643,5 +643,5 @@ if __name__ == '__main__':
     htc = HTC(params)
     htc.quick_integration(100)
     #htc.calculate_evolved_observables(tf = 2.1, fixed_position_index = 5)
-    htc.plot_evolution(tf = 100.1, fixed_position_index = 16)
-    htc.plot_initial_populations()
+    htc.plot_evolution(tf = 100.1, savefig = True, fixed_position_index = 16, kspace = False)
+    htc.plot_initial_populations(kspace = False)
