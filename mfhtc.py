@@ -579,7 +579,7 @@ class HTC:
             ax.set_xlabel('$r_n$')
         ax.set_zlabel('$n_{phot}(r_n)$')
         ax.set_ylabel('t')
-        ax.set_title('Series of Time Snapshots of Photonic Evolution')
+        ax.set_title('Series of Time Snapshots of Photonic Wavepacket Evolution')
         if legend:
             ax.legend()
         if savefig:
