@@ -376,7 +376,7 @@ class HTC:
         C = self.coeffs
         a, lp, l0 = self.split_reshape_return(state) 
         # Calculate DFT
-        alpha = ifft(a, axis=0, norm = 'forward')
+        alpha = fft(a, axis=0, norm = 'backward')
         # EQ 1 
         pre_c = contract('i,in->n', C['12_1'], lp)   
         post_c = fft(pre_c, axis=0, norm='forward')
@@ -637,8 +637,8 @@ if __name__ == '__main__':
         'T': 0.026, # k_B T in eV (.0259=300K, .026=302K)
         'gam_nu': 0.0, #0.01, # vibrational damping rate
         'initial_state': 'incoherent', # or incoherent
-        'A': 0.8, # amplitude of initial wavepacket
-        'k_0': 0.0, # central wavenumber of initial wavepacket
+        'A': 0.1, # amplitude of initial wavepacket
+        'k_0': 1.0, # central wavenumber of initial wavepacket
         'sig_0': 4.0, # s.d. of initial wavepacket
         'atol': 1e-9, # solver tolerance
         'rtol': 1e-6, # solver tolerance
@@ -647,7 +647,7 @@ if __name__ == '__main__':
         }
     
     htc = HTC(params)
-    htc.quick_integration(100)
+    #htc.quick_integration(100)
     #htc.calculate_evolved_observables(tf = 2.1, fixed_position_index = 5)
     htc.plot_evolution(tf = 100.1, savefig = True, fixed_position_index = 16, kspace = False)
     htc.plot_initial_populations(kspace = False)
