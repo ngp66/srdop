@@ -40,7 +40,7 @@ sns.set_theme(context='notebook', style='ticks', palette='colorblind6', # 'color
                   }
               )
 
-class HTC:
+class HTC1:
     COLORS = plt.rcParams['axes.prop_cycle'].by_key()['color'] 
     EV_TO_FS = (constants.hbar/constants.e)*1e15 # convert time in electronvolts to time in fs
     DEFAULT_DIRS = {'data':'./data', 'figures':'./figures'} # output directories
@@ -70,6 +70,7 @@ class HTC:
             'atol':1e-9, # solver tolerance
             'rtol':1e-6, # solver tolerance
             'dt': 0.5, # determines interval at which solution is evaluated. Does not effect the accuracy of solution, only the grid at which observables are recorded
+            'exciton': True, # if True, initial state is pure exciton; if False, a lower polariton initial state is created
             #'lowpass': 0.01, # used for smoothing oscillations in observable plots
             }
 
@@ -213,6 +214,7 @@ class HTC:
         Hvib = Boson(Nnu)
         b, bd, bn, bi = Hvib.b, Hvib.bd, Hvib.n, Hvib.i
         sm, sp, sz, si = Pauli.m, Pauli.p, Pauli.z, Pauli.i
+        exciton = params['exciton']
         A = 0.5*params['epsilon']*np.kron(sz, bi) +\
                 params['omega_nu']*np.kron(si, bn) +\
                 params['omega_nu']*np.sqrt(params['S'])*np.kron(sz, b+bd) + 0j
@@ -261,7 +263,7 @@ class HTC:
                 - 1j * contract('aip,pq,aqj->ij', f011, consts['gampp'], z011) 
         shifted_Ks = np.fft.ifftshift(self.Ks) # ALL COMPUTATIONS DONE WITH numpy order of modes
         consts['kappa'] = self.kappa(shifted_Ks)
-        consts['omega'] = self.omega(shifted_Ks)
+        consts['omega'] = self.omega(shifted_Ks, exciton)
         consts['zetap'] = gp.get_coefficients(np.kron(sp, bi), sgn=1, eye=False)
         consts['zetazeta'] = contract('i,j,aij->a', consts['zetap'],
                              consts['zetap'], z011)
@@ -270,7 +272,7 @@ class HTC:
         # EQ 1 
         coeffs['11_k'] = np.ones(Nk, dtype=complex) 
         for i, K in enumerate(shifted_Ks):
-                coeffs['11_k'][i] *= -(1j * self.omega(K) + 0.5 * self.kappa(K))
+                coeffs['11_k'][i] *= -(1j * self.omega(K, exciton) + 0.5 * self.kappa(K))
         coeffs['12_1'] = 1j * consts['Bp']
         # EQ 2
         coeffs['21_11'] = 1 * consts['xip'] 
@@ -281,17 +283,21 @@ class HTC:
         coeffs['33_01'] = 4 * contract('aij,i->aj', f011, consts['Bp']) 
         # Hopfield coefficients 
         consts['zeta_k'] = 0.5 * np.sqrt( (params['epsilon'] - consts['omega'])**2 + 4 * params['gSqrtN']**2 )
-        coeffs['X_k'] = 0.0 #np.sqrt(0.5  + 0.5**2 * (params['epsilon'] - consts['omega'])/consts['zeta_k'])
-        coeffs['Y_k'] = 1.0 #np.sqrt(0.5  - 0.5**2 * (params['epsilon'] - consts['omega'])/consts['zeta_k'])
+        if exciton:
+            coeffs['X_k'] = np.zeros_like(shifted_Ks)
+            coeffs['Y_k'] = np.ones_like(shifted_Ks)
+        else:
+            coeffs['X_k'] = np.sqrt(0.5  + 0.5**2 * (params['epsilon'] - consts['omega'])/consts['zeta_k'])
+            coeffs['Y_k'] = np.sqrt(0.5  - 0.5**2 * (params['epsilon'] - consts['omega'])/consts['zeta_k'])
         assert np.allclose(coeffs['X_k']**2+coeffs['Y_k']**2, 1.0), 'Hopfield coeffs. not normalised'
         self.consts, self.coeffs = consts, coeffs  
         
-    def omega(self, K, pure_exciton = False):
+    def omega(self, K, exciton = True):
         # dispersion to match MODEL used by Xu et al. 2023 (self.K_factor set in
-        # self.add_useful_params)
-        #if pure_exciton:
-        return np.zeros_like(K)
-        #return self.wc * np.sqrt(1 + self.K_factor**2 * K**2)
+        # self.add_useful_params) or no dispersion if initial state is pure exciton
+        if exciton:
+            return np.zeros_like(K)
+        return self.wc * np.sqrt(1 + self.K_factor**2 * K**2)
 
     def kappa(self, K):
         # uniform
@@ -438,14 +444,14 @@ class HTC:
         delta_k = np.eye(self.Nk) # equivalent to 2*Nnu*zeta(i+)zeta(j+)delta(i+,j+)
         for p, k in itertools.product(range(self.Nk), range(self.Nk)): 
             sigsig[p,k] = sigsig_k1[k,p] - sigsig_k2[k-p] + post_l0[k-p] + 0.5 * delta_k[k,p]
-            n_U[p,k] = self.coeffs['X_k'] * self.coeffs['X_k'] * sigsig[p,k] \
-            + self.coeffs['Y_k'] * self.coeffs['Y_k'] * n_k[p,k] \
-            + self.coeffs['X_k'] * self.coeffs['Y_k'] * asig_k[k,p] \
-            + self.coeffs['Y_k'] * self.coeffs['X_k'] * np.conj(asig_k[p,k])
-            n_L[p,k] = self.coeffs['X_k'] * self.coeffs['X_k'] * n_k[p,k] \
-            + self.coeffs['Y_k'] * self.coeffs['Y_k'] * sigsig[p,k] \
-            - self.coeffs['X_k'] * self.coeffs['Y_k'] * np.conj(asig_k[p,k]) \
-            - self.coeffs['Y_k'] * self.coeffs['X_k'] * asig_k[k,p]
+            n_U[p,k] = self.coeffs['X_k'][p] * self.coeffs['X_k'][k] * sigsig[p,k] \
+            + self.coeffs['Y_k'][p] * self.coeffs['Y_k'][k] * n_k[p,k] \
+            + self.coeffs['X_k'][p] * self.coeffs['Y_k'][k] * asig_k[k,p] \
+            + self.coeffs['Y_k'][p] * self.coeffs['X_k'][k] * np.conj(asig_k[p,k])
+            n_L[p,k] = self.coeffs['X_k'][p] * self.coeffs['X_k'][k] * n_k[p,k] \
+            + self.coeffs['Y_k'][p] * self.coeffs['Y_k'][k] * sigsig[p,k] \
+            - self.coeffs['X_k'][p] * self.coeffs['Y_k'][k] * np.conj(asig_k[p,k]) \
+            - self.coeffs['Y_k'][p] * self.coeffs['X_k'][k] * asig_k[k,p]
         return n_k, n_L, n_U, sigsig, asig_k
         
     def calculate_observables(self, state):
@@ -609,6 +615,7 @@ if __name__ == '__main__':
         'atol': 1e-9, # solver tolerance
         'rtol': 1e-6, # solver tolerance
         'dt': 0.5, # determines interval at which solution is evaluated. Does not effect the accuracy of solution, only the grid at which observables are recorded
+        'exciton': True, # if True, initial state is pure exciton; if False, a lower polariton initial state is created
         }
     
     htc = HTC(params)
