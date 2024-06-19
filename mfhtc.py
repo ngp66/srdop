@@ -421,7 +421,7 @@ class HTC:
         #print(-(self.NE - 1)*zzlplp + (self.NE - 1)*(zzzl0 + 0.5)/self.NE)
         return n_B_r
 
-    def calculate_upper_lower_polariton(self, a, lp, l0): 
+    def calculate_upper_lower_polariton(self, a, lp, l0, Julia = False): 
         """Calculate coherences <sigma_k'(+)sigma_k(-)> and <a_k sigma_k(+)>, 
         as well as upper and lower polariton populations, all in k-space."""
         gp = self.gp
@@ -451,7 +451,15 @@ class HTC:
             + self.coeffs['Y_k'][p] * self.coeffs['Y_k'][k] * sigsig[p,k] \
             - self.coeffs['X_k'][p] * self.coeffs['Y_k'][k] * np.conj(asig_k[p,k]) \
             - self.coeffs['Y_k'][p] * self.coeffs['X_k'][k] * asig_k[k,p]
+        if Julia:
+            return n_k, n_L, n_U, sigsig, sig_plus, asig_k
         return n_k, n_L, n_U, sigsig, asig_k
+
+    def Julia_comparison(self):
+        state = self.initial_state() # build initial state
+        a, lp, l0 = self.split_reshape_return(state)
+        n_k, n_L, n_U, sigsig, sig_plus, asig_k = self.calculate_upper_lower_polariton(a, lp, l0, Julia = True)
+        return a, sig_plus, sigsig
         
     def calculate_observables(self, state, kspace = True):
         """Calculate coherences, polariton, photon and molecular numbers for a given state. n_L, n_U, sigsig, asig_k always in k space; n_M and n_B always in real space, n_k optional in real space.""" 
