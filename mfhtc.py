@@ -502,11 +502,10 @@ class HTC:
         asig_k_diag = fftshift(np.diag(asig_k).real) # shift back so that k=0 component is at the center
         return n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag
 
-    def calculate_evolved_observables(self, tf = None, fixed_position_index = None, kspace = False):
+    def calculate_evolved_observables(self, tf = None, fixed_position_index = False, kspace = False):
         t_fs = np.arange(0.0, tf, step = self.dt) # create array of integration times 
         state = self.initial_state() # build initial state
         n_k_arr, n_M_arr, n_L_arr, n_U_arr, n_B_arr, n_D_arr, sigsig_arr, asig_k_arr = self.calculate_diagonal_elements(state, kspace) # calculate observables for initial state
-        #print(n_B_arr)
         if fixed_position_index != None: # pick values of observables at fixed k/r value
             n_k_arr = n_k_arr[fixed_position_index]
             n_M_arr = n_M_arr[fixed_position_index]
@@ -516,12 +515,10 @@ class HTC:
             n_D_arr = n_D_arr[fixed_position_index]
             sigsig_arr = sigsig_arr[fixed_position_index]
             asig_k_arr = asig_k_arr[fixed_position_index]
-        print(n_B_arr)
         for i in range(len(t_fs)-1):
-            #print('Step t_i =', t_fs[i], 't_f =', t_fs[i+1])
             state = self.quick_integration(state, tf = t_fs[i+1], ti = t_fs[i]) # integrate eoms from ti to tf
             n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag = self.calculate_diagonal_elements(state, kspace) # calculate observables for evolved state
-            if fixed_position_index != None: # append with calculated observables at a fixed k/r value at each time step 
+            if fixed_position_index != False: # append with calculated observables at a fixed k/r value at each time step 
                 n_k_arr = np.append(n_k_arr, n_k_diag[fixed_position_index])
                 n_M_arr = np.append(n_M_arr, n_M_diag[fixed_position_index])
                 n_L_arr = np.append(n_L_arr, n_L_diag[fixed_position_index])
@@ -546,29 +543,60 @@ class HTC:
             assert len(n_U_arr) == self.Nk*(len(t_fs)), 'Length of evolved upper polariton population array does not have the required dimensions'
             assert len(n_B_arr) == self.Nk*(len(t_fs)), 'Length of evolved bright exciton population array does not have the required dimensions'
             assert len(n_D_arr) == self.Nk*(len(t_fs)), 'Length of evolved dark exciton population array does not have the required dimensions'
-        return t_fs, n_k_arr, n_M_arr, n_B_arr, n_D_arr, sigsig_arr #n_L_arr, n_U_arr, sigsig_arr, asig_k_arr
+        return t_fs, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr # sigsig_arr, asig_k_arr
                 
     def plot_evolution(self, savefig = False, tf = 1.0, fixed_position_index = 6, kspace = False):
-        times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, sigsig_arr = self.calculate_evolved_observables(tf, fixed_position_index, kspace)
+        times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables(tf, fixed_position_index, kspace)
         fig, ax = plt.subplots(1,1,figsize = (6,4))
-        ax.plot(times, n_M_arr, label = '$n_{B}$')
-        ax.scatter(times, n_M_arr, marker = '.')
+        ax.plot(times, n_B_arr, label = '$n_{B}$')
+        ax.scatter(times, n_B_arr, marker = '.')
         ax.plot(times, n_k_arr, label = '$n_{phot}$')
         ax.scatter(times, n_k_arr, marker = '.')
         #ax.plot(times, n_D_arr, label = '$n_{D}$')
         #x.scatter(times, n_D_arr, marker = '.')
         ax.set_xlabel('time')
         ax.set_ylabel(f'n(k={self.Ks[fixed_position_index]})')
-        #f'pi on 2 decimals is: {pi:.2f}'
         ax.legend()
         ax.set_title('Photonic and Excitonic Population Evolution over Time')
         if savefig:
             plt.savefig(fname = 'evolution.jpg', format = 'jpg')
+
+    def plot_waterfall(self, n_L = False, n_B = False, n_k = False, savefig = False, tf = 101.1, kspace = False, legend = False, step = 10):
+        step = 2*step*self.dt
+        slices = np.arange(0.0, tf, step)
+        times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables(tf, kspace)
+        fig = plt.figure(figsize=(10,6), layout = 'tight')
+        ax = fig.add_subplot(projection='3d')
+        colors = plt.cm.coolwarm(np.linspace(0,1,len(slices)))
+        if n_B:
+            n_arr = n_B_arr
+            ax.set_zlabel('$n_{B}(r_n)$')
+        if n_k:
+            n_arr = n_k_arr
+            ax.set_zlabel('$n_{phot}(r_n)$')
+        if n_L:
+            n_arr = n_L_arr
+            ax.set_zlabel('$n_{L}(r_n)$')
+        assert isinstance(n_arr, np.ndarray), "Please, specify one of n_L, n_B and n_k"
+        for i in range(len(slices)):
+            index = np.where(times == slices[i])
+            n_i = n_arr[i*self.Nk:(i+1)*self.Nk]
+            ax.plot(self.Ks, n_i, label = f't = {slices[i]}', zdir = 'y', zs=slices[i], zorder = (len(slices)-i), color=colors[i])
+        if kspace:
+            ax.set_xlabel('$k$')
+        else:
+            ax.set_xlabel('$r_n$')
+        ax.set_ylabel('t')
+        ax.set_title('Time Snapshots of Wavepacket Evolution')
+        if legend:
+            ax.legend()
+        if savefig:
+            plt.savefig(fname = 'plot_waterfall.jpg', format = 'jpg')
         
     def plot_initial_populations(self, savefig = False, kspace = False):
         state_i = self.initial_state()
         n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag = self.calculate_diagonal_elements(state_i, kspace)
-        print(n_B_diag[15])
+        #print(n_B_diag[19])
         fig1, ax1 = plt.subplots(5,1,figsize = (12,10),sharex = True)
         ax1[0].scatter(self.Ks, n_U_diag, marker = '.')
         ax1[0].plot(self.Ks, n_U_diag)
@@ -651,3 +679,4 @@ if __name__ == '__main__':
     #htc.calculate_evolved_observables(tf = 2.1, fixed_position_index = 5)
     htc.plot_evolution(tf = 100.1, savefig = True, fixed_position_index = 16, kspace = False)
     htc.plot_initial_populations(kspace = False)
+    htc.plot_waterfall(legend = True, n_L = True)
