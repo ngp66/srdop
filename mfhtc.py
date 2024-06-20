@@ -389,6 +389,24 @@ class HTC:
         dy_state = np.concatenate((dy_a, dy_lp, dy_l0), axis=None)
         return dy_state
 
+    def full_integration(self, tf, y0=None, ti = 0.0, dt = None):
+        """Integrates the equations of motion from state y0 
+        at t = 0 to tf using solve_ivp.
+        Evaluates on grid spacing dt (default self.params['dt'])
+        Returns array of times and array of corresponding state variables."""
+        assert tf > ti, 'Final time is smaller than initial time'
+        if dt is None:
+            dt = self.params['dt']
+        if y0 is None:
+            y0 = self.initial_state()
+        t_eval = np.arange(ti, tf+dt/2, dt)
+        ivp = solve_ivp(self.eoms, [ti,tf], y0, t_eval=t_eval,
+                        method='DOP853',
+                        atol=1e-8,
+                        rtol=1e-7)
+        logger.info(ivp.message)
+        return ivp.t, ivp.y
+
     def quick_integration(self, state, tf, ti = 0.0):
         """Integrates the equations of motion from t = 0 to tf using solve_ivp."""
         assert tf > ti, 'Final time is smaller than initial time'
@@ -623,11 +641,11 @@ class HTC:
             ax1[2].set_xlabel('$r_n$')            
         ax1[3].scatter(self.Ks, sigsig_diag, marker = '.')
         ax1[3].plot(self.Ks, sigsig_diag)
-        ax1[3].set_ylabel('$< \sigma_{k}^{+} \sigma_k^{-}>$')
+        ax1[3].set_ylabel(r'$< \sigma_{k}^{+} \sigma_k^{-}>$')
         ax1[4].scatter(self.Ks, asig_k_diag, marker = '.')
         ax1[4].plot(self.Ks, asig_k_diag)
-        ax1[4].set_xlabel('$k$')
-        ax1[4].set_ylabel('$< a_k \sigma_k^{+}>$')
+        ax1[4].set_xlabel(r'$k$')
+        ax1[4].set_ylabel(r'$< a_k \sigma_k^{+}>$')
         fig1.suptitle('Initial Populations and Coherences in k-space')
         fig1.tight_layout(h_pad=0.2)
         if savefig:
@@ -649,6 +667,52 @@ class HTC:
         fig2.tight_layout(h_pad=0.2)
         if savefig:
             plt.savefig(fname = 'brightdark_populations.jpg', format = 'jpg')
+
+def julia_comparison(julia_fp=None):
+    params = {'Q0':0,
+              'Nm':int(1e5),
+              'Nnu':1,
+              'gSqrtN':0.45,
+              'kappa_c':0.05,
+              'omega_c':0.2,
+              'epsilon':0.1,
+              'Gam_up':0.06, # lasing phase 
+              'Gam_down':0.05,
+              'Gam_z':0.01,
+              'k_0': 0.0,
+              'A': 0.2,
+              'exciton':False,
+              'dt': 0.5,
+              }
+    htc = HTC(params)
+    tf = 300.0
+    y0 = htc.initial_state()
+    a, lp, l0 = htc.split_reshape_return(y0) 
+    a *= np.sqrt(params['Nm']) # rescale!
+    sp = np.kron(Pauli.p, htc.boson.i)
+    p1 = np.kron(Pauli.p1, htc.boson.i)
+    sp_coeffs = htc.gp.get_coefficients(sp, sgn=1, eye=False)
+    p1_coeffs, p1_eye = htc.gp.get_coefficients(p1, sgn=0, eye=True)
+    sp_val = htc.gp.get_expectation(lp, sp_coeffs)
+    p1_val = htc.gp.get_expectation(l0, p1_coeffs, eye=p1_eye)
+    print(f'    <a>   = {a[0]}')
+    print(f'<sigma^+> = {sp_val}')
+    print(f'   <p^up> = {p1_val}')
+    print(f'       tf = {tf}')
+    if julia_fp is None:
+        return
+    ts, ys = htc.full_integration(tf)
+    ns = np.abs(ys[0,:])**2
+    fig, ax = plt.subplots(figsize=(4,4), constrained_layout=True)
+    ax.set_xlabel(r'$t$')
+    ax.set_ylabel(r'$n/N$')
+    ax.plot(ts, ns, label=r'\rm{mfhtc.py}') # scaled photon number
+    julia_data = np.loadtxt(julia_fp)
+    ax.plot(julia_data[0], julia_data[1]/params['Nm'], label=r'\rm{QuantumCumulants.jl}', ls='--')
+    ax.set_title(r'$g\sqrt{{N_m}}={gSqrtN},\ \Gamma_z={Gam_z}$'.format(**params))
+    ax.legend()
+    fig.savefig('figures/julia_comparison.png', dpi=350, bbox_inches='tight')
+
             
 if __name__ == '__main__':
     logging.basicConfig(
@@ -681,10 +745,10 @@ if __name__ == '__main__':
         'dt': 0.5, # determines interval at which solution is evaluated. Does not effect the accuracy of solution, only the grid at which observables are recorded
         'exciton': True, # if True, initial state is pure exciton; if False, a lower polariton initial state is created
         }
-    
+    #julia_comparison('data/julia/gn0.45N1e5Z1.csv') # Gam_z = 0.01 # Julia comparison 2024-06-20
     htc = HTC(params)
     #htc.quick_integration(100)
     #htc.calculate_evolved_observables(tf = 2.1, fixed_position_index = 5)
-    htc.plot_evolution(tf = 100.1, savefig = True, fixed_position_index = 16, kspace = False)
-    htc.plot_initial_populations(kspace = False)
-    htc.plot_waterfall(legend = True, n_L = True)
+    #htc.plot_evolution(tf = 100.1, savefig = True, fixed_position_index = 16, kspace = False)
+    #htc.plot_initial_populations(kspace = False)
+    #htc.plot_waterfall(legend = True, n_L = True)
