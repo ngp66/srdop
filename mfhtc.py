@@ -10,13 +10,12 @@ import seaborn as sns
 import logging, pickle, os, sys
 from opt_einsum import contract
 from gmanp import pBasis, Pauli, Boson
-from time import time, perf_counter, process_time, sleep
-from datetime import datetime, timedelta
+from time import time
 from pprint import pprint, pformat
 from copy import copy
-from scipy.integrate import solve_ivp, quad_vec, RK45
+from scipy.integrate import solve_ivp, RK45, DOP853
 from scipy.linalg import expm
-SOLVER = RK45 # Best!
+SOLVER = RK45 # or DOP853
 from scipy import constants
 import itertools
 from scipy.fft import fft, fft2, ifft, ifft2, fftshift, ifftshift # recommended over numpy.fft
@@ -389,6 +388,77 @@ class HTC:
         dy_state = np.concatenate((dy_a, dy_lp, dy_l0), axis=None)
         return dy_state
 
+    def stepwise_integration(self, tf, y0=None, ti=0.0, dt=None):
+        """Integrates the equations of motion from state y0 
+        at t = 0 to tf using explicit Runge-Kutta
+        Evaluates on grid spacing dt (default self.params['dt'])
+        Solver is called directly in a loop allowing for calculation 
+        of observables on the fly.
+        Returns array of times and corresponding values of observables
+        [currently just entire state]"""
+        assert tf > ti, 'Final time is smaller than initial time'
+        if dt is None:
+            dt = self.params['dt']
+        if y0 is None:
+            y0 = self.initial_state()
+        t_eval = np.arange(ti, tf+dt/2, dt)
+        num_t = len(t_eval)
+        num_checkpoints = 6 # checkpoints at 0, 20%,...
+        checkpoint_spacing = int(round(num_t/num_checkpoints))
+        checkpoints = np.linspace(0, num_t-1, num=num_checkpoints, dtype=int)
+        next_check_i = 1
+        solver_t = [] # keep track of solver times (not fixed grid)
+        last_solver_i = 0
+        observables = {'a_k': np.zeros((num_t, self.Nk), dtype=complex),
+                       #'etc':  TODO
+                       }
+        states = []
+        tic = time() # time the computation
+        solver = SOLVER(self.eoms,
+                        t0=0.0,
+                        y0=y0,
+                        t_bound=tf,
+                        rtol=1e-8,
+                        atol=1e-7,
+                        )
+        # Save initial state
+        t_index = 0
+        assert solver.t == t_eval[t_index], 'Solver initial time incorrect'
+        #self.record_observables(t_index, solver.y) # record observables for initial state
+        states.append(solver.y)
+        solver_t.append(solver.t)
+        t_index += 1
+        next_t = t_eval[t_index]
+        while solver.status == 'running':
+            end = False # flag to break integration loop
+            solver.step() # perform one step (necessary before call to dense_output())
+            solver_t.append(solver.t)
+            if solver.t >= next_t: # solver has gone past one (or more) of our grid points, so now evaluate soln
+                soln = solver.dense_output() # interpolation function for the last timestep
+                while solver.t >= next_t: # until soln has been evaluated at all grid points up to solver time
+                    y = soln(next_t)
+                    #self.record_observables(t_index, y) # extract relevant observables from state y 
+                    states.append(y)
+                    t_index += 1
+                    if t_index >= num_t: # reached the end of our grid, stop solver
+                        end = True
+                        break
+                    next_t = t_eval[t_index]
+            if next_check_i < num_checkpoints and t_index >= checkpoints[next_check_i]:
+                solver_diffs = np.diff(solver_t[last_solver_i:])
+                logger.info('Progress {:.0f}% ({:.0f}s)'.format(
+                    100*(checkpoints[next_check_i]+1)/num_t, time()-tic))
+                logger.info('Avg. solver dt for last part: {:.2g} (grid dt={:.3g})'\
+                        .format(np.mean(solver_diffs), dt))
+                next_check_i += 1
+                last_solver_i = len(solver_t) - 1
+            if end:
+                break # safety, stop solver if we have already calculated state at self.t[-1]
+        toc = time()
+        compute_time = toc-tic # ptoc-ptic
+        logger.info('...done ({:.0f}s)'.format(compute_time))
+        return t_eval, states
+
     def full_integration(self, tf, y0=None, ti = 0.0, dt = None):
         """Integrates the equations of motion from state y0 
         at t = 0 to tf using solve_ivp.
@@ -701,8 +771,10 @@ def julia_comparison(julia_fp=None):
     print(f'       tf = {tf}')
     if julia_fp is None:
         return
-    ts, ys = htc.full_integration(tf)
-    ns = np.abs(ys[0,:])**2
+    #ts, ys = htc.full_integration(tf)
+    #ns = np.abs(ys[0,:])**2
+    ts, ys = htc.stepwise_integration(tf)
+    ns = np.abs([y[0] for y in ys])**2
     fig, ax = plt.subplots(figsize=(4,4), constrained_layout=True)
     ax.set_xlabel(r'$t$')
     ax.set_ylabel(r'$n/N$')
@@ -745,8 +817,8 @@ if __name__ == '__main__':
         'dt': 0.5, # determines interval at which solution is evaluated. Does not effect the accuracy of solution, only the grid at which observables are recorded
         'exciton': True, # if True, initial state is pure exciton; if False, a lower polariton initial state is created
         }
-    #julia_comparison('data/julia/gn0.45N1e5Z1.csv') # Gam_z = 0.01 # Julia comparison 2024-06-20
-    htc = HTC(params)
+    julia_comparison('data/julia/gn0.45N1e5Z1.csv') # Gam_z = 0.01 # Julia comparison 2024-06-20
+    #htc = HTC(params)
     #htc.quick_integration(100)
     #htc.calculate_evolved_observables(tf = 2.1, fixed_position_index = 5)
     #htc.plot_evolution(tf = 100.1, savefig = True, fixed_position_index = 16, kspace = False)
