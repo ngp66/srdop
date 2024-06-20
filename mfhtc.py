@@ -693,34 +693,50 @@ class HTC:
         if savefig:
             plt.savefig(fname = 'evolution.jpg', format = 'jpg')
 
-    def plot_waterfall(self, n_L = False, n_B = False, n_k = False, savefig = False, tf = 101.1, kspace = False, legend = False, step = 10):
+    def plot_waterfall(self, n_L = False, n_B = False, n_k = False, savefig = False, tf = 101.1, kspace = False, legend = False, step = 10, threeD = False):
         step = 2*step*self.dt
         slices = np.arange(0.0, tf, step)
         times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables(tf, kspace = kspace)
         fig = plt.figure(figsize=(10,6), layout = 'tight')
-        ax = fig.add_subplot(projection='3d')
+        if threeD:
+            ax = fig.add_subplot(projection='3d')
+        else:
+            ax = fig.add_subplot()
         colors = plt.cm.coolwarm(np.linspace(0,1,len(slices)))
         if n_B:
             n_arr = n_B_arr
-            ax.set_zlabel('$n_{B}(r_n)$')
+            if threeD:
+                ax.set_zlabel('$n_{B}(r_n)$')
+            else:
+                ax.set_ylabel('$n_{L}(r_n)$')
         if n_k:
             n_arr = n_k_arr
-            ax.set_zlabel('$n_{phot}(r_n)$')
+            if threeD:
+                ax.set_zlabel('$n_{phot}(r_n)$')
+            else:
+                ax.set_ylabel('$n_{L}(r_n)$')
         if n_L:
             n_arr = n_L_arr
-            ax.set_zlabel('$n_{L}(r_n)$')
+            if threeD:
+                ax.set_zlabel('$n_{L}(r_n)$')
+            else:
+                ax.set_ylabel('$n_{L}(r_n)$')
         assert isinstance(n_arr, np.ndarray), "Please, specify one of n_L, n_B and n_k"
+        offset = 0.1 * np.max(n_arr)
         n_max = np.array([])
         for i in range(len(slices)):
             index = np.where(times == slices[i])
             n_i = n_arr[i*self.Nk:(i+1)*self.Nk]
-            ax.plot(self.Ks, n_i, label = f't = {slices[i]}', zdir = 'y', zs=slices[i], zorder = (len(slices)-i), color=colors[i])
-            n_max = np.append(n_max, np.max(n_i))
+            n_max = np.append(n_max, self.Ks[np.where(n_i == np.max(n_i))])
+            if threeD:
+                ax.plot(self.Ks, n_i, label = f't = {slices[i]}', zdir = 'y', zs=slices[i], zorder = (len(slices)-i), color=colors[i])
+                ax.set_ylabel('t')
+            else:
+                ax.plot(self.Ks, n_i + i * offset, label = f't = {slices[i]}', color=colors[i])
         if kspace:
             ax.set_xlabel('$k$')
         else:
             ax.set_xlabel('$r_n$')
-        ax.set_ylabel('t')
         ax.set_title('Time Snapshots of Wavepacket Evolution')
         #ax.set_xlim([-3, 3])
         if legend:
