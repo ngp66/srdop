@@ -642,7 +642,36 @@ class HTC:
             assert len(n_B_arr) == self.Nk*(len(t_fs)), 'Length of evolved bright exciton population array does not have the required dimensions'
             assert len(n_D_arr) == self.Nk*(len(t_fs)), 'Length of evolved dark exciton population array does not have the required dimensions'
         return t_fs, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr # sigsig_arr, asig_k_arr
-                
+
+    def cavity_velocity(self, K):
+        """Cavity group velocity in units of meter/eV?"""
+        #v_c = self.c * self.K_factor * K / np.sqrt(1 + self.K_factor**2 * K**2)
+        #omega_k = self.consts['omega']
+        v_c = self.K_factor * K / np.sqrt(1 + self.K_factor**2 * K**2) # no self.c if natural units?
+        return v_c #* 1e6 * 1e-15
+        
+    def group_velocity_expected(self):
+        m_eV_to_mum_fs = 1e-15 * (constants.e/constants.hbar) # conversion from micrometers / eV to micrometer / fs
+        v_c = self.cavity_velocity(self.Ks) #* m_eV_to_mum_fs
+        zeta_k = self.consts['zeta_k']
+        omega_k = self.consts['omega']
+        epsilon = self.params['epsilon']
+        omegaepsilon = omega_k - epsilon
+        v_g = 0.5*v_c*(1 + 0.5*omegaepsilon/zeta_k) #EV_TO_FS = (constants.hbar/constants.e)*1e15 # convert time in electronvolts to time in fs
+        return v_g
+
+    def plot_group_velocity(self):
+        vg = self.group_velocity_expected()
+        vc = self.cavity_velocity(self.Ks)
+        fig, ax = plt.subplots(1,1,figsize = (6,4), layout = 'tight')
+        ax.scatter(self.Ks, vg, marker = '.', label = '$v_{cav}$')
+        ax.plot(self.Ks, vg)
+        ax.scatter(self.Ks, vc, marker = '.', label = '$v_{g}$')
+        ax.plot(self.Ks, vc)        
+        ax.set_ylabel('$v [\mu m/ eV]$')
+        ax.set_xlabel('$k [eV/ \hbar c]$')
+        ax.legend()
+        
     def plot_evolution(self, savefig = False, tf = 1.0, fixed_position_index = 6, kspace = False):
         times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables(tf, fixed_position_index, kspace = kspace)
         fig, ax = plt.subplots(1,1,figsize = (6,4))
