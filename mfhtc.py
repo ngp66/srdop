@@ -39,7 +39,7 @@ sns.set_theme(context='notebook', style='ticks', palette='colorblind6', # 'color
                   }
               )
 
-class HTC:
+class HTC1:
     COLORS = plt.rcParams['axes.prop_cycle'].by_key()['color'] 
     EV_TO_FS = (constants.hbar/constants.e)*1e15 # convert time in electronvolts to time in fs
     DEFAULT_DIRS = {'data':'./data', 'figures':'./figures'} # output directories
@@ -584,7 +584,6 @@ class HTC:
         assert np.allclose(np.diag(sigsig).imag, 0.0), "The coherences have imaginary components"
         #assert np.allclose(np.diag(asig_k).imag, 0.0), "The coherences have imaginary components"  # is that possible?
         if not kspace:
-            #n_k_diag = fftshift(n_k.real)#fftshift(np.diag(n_k).real) # shift back so that k=0 component is at the center
             n_M_diag = fftshift(n_M.real) # shift back so that k=0 component is at the center        
         else:
             n_M_diag = fftshift(np.diag(n_M).real) # shift back so that k=0 component is at the center  
@@ -601,6 +600,8 @@ class HTC:
     def calculate_evolved_observables(self, tf = None, fixed_position_index = False, kspace = False):
         t_fs = np.arange(0.0, tf, step = self.dt) # create array of integration times 
         state = self.initial_state() # build initial state
+        t_fs, y_vals = self.full_integration(tf, state, ti = 0.0)
+        y_vals = y_vals.flatten()
         n_k_arr, n_M_arr, n_L_arr, n_U_arr, n_B_arr, n_D_arr, sigsig_arr, asig_k_arr = self.calculate_diagonal_elements(state, kspace) # calculate observables for initial state
         if fixed_position_index != None: # pick values of observables at fixed k/r value
             n_k_arr = n_k_arr[fixed_position_index]
@@ -612,9 +613,10 @@ class HTC:
             sigsig_arr = sigsig_arr[fixed_position_index]
             asig_k_arr = asig_k_arr[fixed_position_index]
         for i in range(len(t_fs)-1):
-            state = self.quick_integration(state, tf = t_fs[i+1], ti = t_fs[i]) # integrate eoms from ti to tf
+            #state = self.quick_integration(state, tf = t_fs[i+1], ti = t_fs[i]) # integrate eoms from ti to tf
+            state = y_vals[np.arange(i,i+self.state_length*len(t_fs), len(t_fs))]
             n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag = self.calculate_diagonal_elements(state, kspace) # calculate observables for evolved state
-            if fixed_position_index != False: # append with calculated observables at a fixed k/r value at each time step 
+            if fixed_position_index != None: # append with calculated observables at a fixed k/r value at each time step 
                 n_k_arr = np.append(n_k_arr, n_k_diag[fixed_position_index])
                 n_M_arr = np.append(n_M_arr, n_M_diag[fixed_position_index])
                 n_L_arr = np.append(n_L_arr, n_L_diag[fixed_position_index])
@@ -648,8 +650,8 @@ class HTC:
         ax.scatter(times, n_B_arr, marker = '.')
         ax.plot(times, n_k_arr, label = '$n_{phot}$')
         ax.scatter(times, n_k_arr, marker = '.')
-        #ax.plot(times, n_D_arr, label = '$n_{D}$')
-        #x.scatter(times, n_D_arr, marker = '.')
+        ax.plot(times, n_D_arr, label = '$n_{D}$')
+        ax.scatter(times, n_D_arr, marker = '.')
         ax.set_xlabel('time')
         ax.set_ylabel(f'n(k={self.Ks[fixed_position_index]})')
         ax.legend()
@@ -692,7 +694,6 @@ class HTC:
     def plot_initial_populations(self, savefig = False, kspace = False):
         state_i = self.initial_state()
         n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag = self.calculate_diagonal_elements(state_i, kspace)
-        #print(n_B_diag[19])
         fig1, ax1 = plt.subplots(5,1,figsize = (12,10),sharex = True)
         ax1[0].scatter(self.Ks, n_U_diag, marker = '.')
         ax1[0].plot(self.Ks, n_U_diag)
