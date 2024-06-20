@@ -669,9 +669,9 @@ class HTC:
         #epL_diffs =  mum_ev_s_to_mum_fs * np.gradient(epLs, 1) # numerical derivative
         vc, vg = self.group_velocity_expected()
         fig, ax = plt.subplots(1,1,figsize = (6,4), layout = 'tight')
-        ax.scatter(self.Ks, vg, marker = '.', label = '$v_{cav}$')
+        ax.scatter(self.Ks, vg, marker = '.', label = '$v_{g}$')
         ax.plot(self.Ks, vg)
-        ax.scatter(self.Ks, vc, marker = '.', label = '$v_{g}$')
+        ax.scatter(self.Ks, vc, marker = '.', label = '$v_{cav}$')
         ax.plot(self.Ks, vc)        
         ax.set_ylabel('$v [\mu m/ fs]$')
         ax.set_xlabel('$k [eV/ \hbar]$')
