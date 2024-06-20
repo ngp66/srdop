@@ -1,6 +1,7 @@
 data/
 figures/
 *.png
+*.jpg
 *.pkl
 *.npy
 __pycache__/
