@@ -644,7 +644,7 @@ class HTC:
         return t_fs, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr # sigsig_arr, asig_k_arr
                 
     def plot_evolution(self, savefig = False, tf = 1.0, fixed_position_index = 6, kspace = False):
-        times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables(tf, fixed_position_index, kspace)
+        times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables(tf, fixed_position_index, kspace = kspace)
         fig, ax = plt.subplots(1,1,figsize = (6,4))
         ax.plot(times, n_B_arr, label = '$n_{B}$')
         ax.scatter(times, n_B_arr, marker = '.')
@@ -676,20 +676,24 @@ class HTC:
             n_arr = n_L_arr
             ax.set_zlabel('$n_{L}(r_n)$')
         assert isinstance(n_arr, np.ndarray), "Please, specify one of n_L, n_B and n_k"
+        n_max = np.array([])
         for i in range(len(slices)):
             index = np.where(times == slices[i])
             n_i = n_arr[i*self.Nk:(i+1)*self.Nk]
             ax.plot(self.Ks, n_i, label = f't = {slices[i]}', zdir = 'y', zs=slices[i], zorder = (len(slices)-i), color=colors[i])
+            n_max = np.append(n_max, np.max(n_i))
         if kspace:
             ax.set_xlabel('$k$')
         else:
             ax.set_xlabel('$r_n$')
         ax.set_ylabel('t')
         ax.set_title('Time Snapshots of Wavepacket Evolution')
+        #ax.set_xlim([-3, 3])
         if legend:
             ax.legend()
         if savefig:
             plt.savefig(fname = 'plot_waterfall.jpg', format = 'jpg')
+        return n_max
         
     def plot_initial_populations(self, savefig = False, kspace = False):
         state_i = self.initial_state()
