@@ -662,7 +662,7 @@ class HTC:
     def plot_waterfall(self, n_L = False, n_B = False, n_k = False, savefig = False, tf = 101.1, kspace = False, legend = False, step = 10):
         step = 2*step*self.dt
         slices = np.arange(0.0, tf, step)
-        times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables(tf, kspace)
+        times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables(tf, kspace = kspace)
         fig = plt.figure(figsize=(10,6), layout = 'tight')
         ax = fig.add_subplot(projection='3d')
         colors = plt.cm.coolwarm(np.linspace(0,1,len(slices)))
