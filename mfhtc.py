@@ -39,7 +39,7 @@ sns.set_theme(context='notebook', style='ticks', palette='colorblind6', # 'color
                   }
               )
 
-class HTC1:
+class HTC:
     COLORS = plt.rcParams['axes.prop_cycle'].by_key()['color'] 
     EV_TO_FS = (constants.hbar/constants.e)*1e15 # convert time in electronvolts to time in fs
     DEFAULT_DIRS = {'data':'./data', 'figures':'./figures'} # output directories
