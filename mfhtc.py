@@ -616,7 +616,7 @@ class HTC:
             #state = self.quick_integration(state, tf = t_fs[i+1], ti = t_fs[i]) # integrate eoms from ti to tf
             state = y_vals[np.arange(i,i+self.state_length*len(t_fs), len(t_fs))]
             n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag = self.calculate_diagonal_elements(state, kspace) # calculate observables for evolved state
-            if fixed_position_index != None: # append with calculated observables at a fixed k/r value at each time step 
+            if fixed_position_index != False: # append with calculated observables at a fixed k/r value at each time step 
                 n_k_arr = np.append(n_k_arr, n_k_diag[fixed_position_index])
                 n_M_arr = np.append(n_M_arr, n_M_diag[fixed_position_index])
                 n_L_arr = np.append(n_L_arr, n_L_diag[fixed_position_index])
