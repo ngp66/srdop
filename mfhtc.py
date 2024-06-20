@@ -817,8 +817,8 @@ if __name__ == '__main__':
         'dt': 0.5, # determines interval at which solution is evaluated. Does not effect the accuracy of solution, only the grid at which observables are recorded
         'exciton': True, # if True, initial state is pure exciton; if False, a lower polariton initial state is created
         }
-    julia_comparison('data/julia/gn0.45N1e5Z1.csv') # Gam_z = 0.01 # Julia comparison 2024-06-20
-    #htc = HTC(params)
+    #julia_comparison('data/julia/gn0.45N1e5Z1.csv') # Gam_z = 0.01 # Julia comparison 2024-06-20
+    htc = HTC(params)
     #htc.quick_integration(100)
     #htc.calculate_evolved_observables(tf = 2.1, fixed_position_index = 5)
     #htc.plot_evolution(tf = 100.1, savefig = True, fixed_position_index = 16, kspace = False)
