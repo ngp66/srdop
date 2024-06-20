@@ -644,32 +644,37 @@ class HTC:
         return t_fs, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr # sigsig_arr, asig_k_arr
 
     def cavity_velocity(self, K):
-        """Cavity group velocity in units of meter/eV?"""
-        #v_c = self.c * self.K_factor * K / np.sqrt(1 + self.K_factor**2 * K**2)
-        #omega_k = self.consts['omega']
-        v_c = self.K_factor * K / np.sqrt(1 + self.K_factor**2 * K**2) # no self.c if natural units?
-        return v_c #* 1e6 * 1e-15
+        """Cavity group velocity in units of micrometer / fs"""
+        v_c = (1e6 * 1e-15) * self.c * self.K_factor * K / np.sqrt(1 + self.K_factor**2 * K**2) # in micrometer / fs (self.c in m/s; * self.K_factor * K in eV)
+        return v_c
         
     def group_velocity_expected(self):
-        m_eV_to_mum_fs = 1e-15 * (constants.e/constants.hbar) # conversion from micrometers / eV to micrometer / fs
-        v_c = self.cavity_velocity(self.Ks) #* m_eV_to_mum_fs
+        """Expected lower polariton group velocity in units of micrometer / fs"""        
+        #mum_eV_to_mum_fs = 1e-15 * (constants.e/constants.hbar) # conversion from micrometers / eV to micrometer / fs
+        v_c = self.cavity_velocity(self.Ks) # in micrometer / fs
         zeta_k = self.consts['zeta_k']
         omega_k = self.consts['omega']
         epsilon = self.params['epsilon']
         omegaepsilon = omega_k - epsilon
         v_g = 0.5*v_c*(1 + 0.5*omegaepsilon/zeta_k) #EV_TO_FS = (constants.hbar/constants.e)*1e15 # convert time in electronvolts to time in fs
-        return v_g
+        return v_c, v_g
 
     def plot_group_velocity(self):
-        vg = self.group_velocity_expected()
-        vc = self.cavity_velocity(self.Ks)
+        #mum_ev_s_to_mum_fs = 1e-15 * (constants.e/constants.hbar) # conversion from micrometer ev (?) / s to micrometer / fs
+        #omegas = self.omega(self.Ks)
+        #omega_c = self.params['omega_c']
+        #ep_omegas = self.params['epsilon'] - omegas
+        #xis = 0.5 * np.sqrt(ep_omegas**2 + self.params['gSqrtN']**2)
+        #epLs = 0.5 * (self.params['epsilon'] + omegas) - xis # Lower polariton energies
+        #epL_diffs =  mum_ev_s_to_mum_fs * np.gradient(epLs, 1) # numerical derivative
+        vc, vg = self.group_velocity_expected()
         fig, ax = plt.subplots(1,1,figsize = (6,4), layout = 'tight')
         ax.scatter(self.Ks, vg, marker = '.', label = '$v_{cav}$')
         ax.plot(self.Ks, vg)
         ax.scatter(self.Ks, vc, marker = '.', label = '$v_{g}$')
         ax.plot(self.Ks, vc)        
-        ax.set_ylabel('$v [\mu m/ eV]$')
-        ax.set_xlabel('$k [eV/ \hbar c]$')
+        ax.set_ylabel('$v [\mu m/ fs]$')
+        ax.set_xlabel('$k [eV/ \hbar]$')
         ax.legend()
         
     def plot_evolution(self, savefig = False, tf = 1.0, fixed_position_index = 6, kspace = False):
