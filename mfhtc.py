@@ -281,7 +281,7 @@ class HTC:
         coeffs['32_0'] = np.broadcast_to(consts['phi0'], (Nk, self.N0)).T # cast phi to a matrix to match dimensions of other variables in equation
         coeffs['33_01'] = 4 * contract('aij,i->aj', f011, consts['Bp']) 
         # Hopfield coefficients 
-        consts['zeta_k'] = 0.5 * np.sqrt( (params['epsilon'] - consts['omega'])**2 + 4 * params['gSqrtN']**2 )
+        consts['zeta_k'] = 0.5 * np.sqrt( (params['epsilon'] - consts['omega'])**2 + 4*params['gSqrtN']**2 )
         if exciton:
             coeffs['X_k'] = np.zeros_like(shifted_Ks)
             coeffs['Y_k'] = np.ones_like(shifted_Ks)
@@ -645,21 +645,24 @@ class HTC:
 
     def cavity_velocity(self, K):
         """Cavity group velocity in units of micrometer / fs"""
-        v_c = (1e6 * 1e-15) * self.c * self.K_factor * K / np.sqrt(1 + self.K_factor**2 * K**2) # in micrometer / fs (self.c in m/s; * self.K_factor * K in eV)
+        v_c = (1e6 * 1e-15) * (constants.e/constants.hbar) *  self.c * self.K_factor * K / np.sqrt(1 + self.K_factor**2 * K**2) # in micrometer / fs (self.c in m/s; * self.K_factor * K in eV)
         return v_c
         
     def group_velocity_expected(self):
         """Expected lower polariton group velocity in units of micrometer / fs"""        
         #mum_eV_to_mum_fs = 1e-15 * (constants.e/constants.hbar) # conversion from micrometers / eV to micrometer / fs
-        v_c = self.cavity_velocity(self.Ks) # in micrometer / fs
-        zeta_k = self.consts['zeta_k']
-        omega_k = self.consts['omega']
+        exciton = self.params['exciton']
+        all_Ks = np.linspace(-1.5*np.abs(self.Ks[0]), 1.5*np.abs(self.Ks[-1]), 250)        
+        v_c = self.cavity_velocity(all_Ks) # in micrometer / fs
+        omega_k = self.omega(all_Ks, exciton) #self.consts['omega']
         epsilon = self.params['epsilon']
-        omegaepsilon = omega_k - epsilon
-        v_g = 0.5*v_c*(1 + 0.5*omegaepsilon/zeta_k) #EV_TO_FS = (constants.hbar/constants.e)*1e15 # convert time in electronvolts to time in fs
-        return v_c, v_g
+        ep_omegas =  epsilon - omega_k
+        zeta_k = 0.5 * np.sqrt(ep_omegas**2 + 4*self.params['gSqrtN']**2) #self.consts['zeta_k'] 
+        v_L = 0.5*v_c*(1 + 0.5*ep_omegas/zeta_k) #EV_TO_FS = (constants.hbar/constants.e)*1e15 # convert time in electronvolts to time in fs
+        v_U = 0.5*v_c*(1 - 0.5*ep_omegas/zeta_k)
+        return v_c, v_L, v_U
 
-    def plot_group_velocity(self):
+    def plot_group_velocities(self, savefig = False):
         #mum_ev_s_to_mum_fs = 1e-15 * (constants.e/constants.hbar) # conversion from micrometer ev (?) / s to micrometer / fs
         #omegas = self.omega(self.Ks)
         #omega_c = self.params['omega_c']
@@ -667,15 +670,21 @@ class HTC:
         #xis = 0.5 * np.sqrt(ep_omegas**2 + self.params['gSqrtN']**2)
         #epLs = 0.5 * (self.params['epsilon'] + omegas) - xis # Lower polariton energies
         #epL_diffs =  mum_ev_s_to_mum_fs * np.gradient(epLs, 1) # numerical derivative
-        vc, vg = self.group_velocity_expected()
+        all_Ks = np.linspace(-1.5*np.abs(self.Ks[0]), 1.5*np.abs(self.Ks[-1]), 250)        
+        vc, vgL, vgU = self.group_velocity_expected()
         fig, ax = plt.subplots(1,1,figsize = (6,4), layout = 'tight')
-        ax.scatter(self.Ks, vg, marker = '.', label = '$v_{g}$')
-        ax.plot(self.Ks, vg)
-        ax.scatter(self.Ks, vc, marker = '.', label = '$v_{cav}$')
-        ax.plot(self.Ks, vc)        
+        #ax.scatter(all_Ks, vgL, marker = '.')
+        ax.plot(all_Ks, vgL, label = '$v^{L}_{g}$')
+        #ax.scatter(all_Ks, vgU, marker = '.')
+        ax.plot(all_Ks, vgU, label = '$v^{U}_{g}$')
+        #ax.scatter(all_Ks, vc, marker = '.')
+        ax.plot(all_Ks, vc, label = '$v_{cav}$')        
         ax.set_ylabel('$v [\mu m/ fs]$')
-        ax.set_xlabel('$k [eV/ \hbar]$')
+        ax.set_xlabel('$k [\mu m^{-1}]$')
         ax.legend()
+        if savefig:
+            plt.savefig(fname = 'dispersion.jpg', format = 'jpg')
+            
         
     def plot_evolution(self, savefig = False, tf = 1.0, fixed_position_index = 6, kspace = False):
         times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables(tf, fixed_position_index, kspace = kspace)
