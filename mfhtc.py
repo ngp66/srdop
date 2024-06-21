@@ -650,7 +650,7 @@ class HTC:
         
     def group_velocity_expected(self):
         """Expected lower polariton group velocity in units of micrometer / fs"""        
-        #mum_eV_to_mum_fs = 1e-15 * (constants.e/constants.hbar) # conversion from micrometers / eV to micrometer / fs
+        #mum_eV_to_mum_fs = 1e-15 * (constants.hbar/constants.e) # conversion from micrometers / eV to micrometer / fs
         exciton = self.params['exciton']
         all_Ks = np.linspace(-1.5*np.abs(self.Ks[0]), 1.5*np.abs(self.Ks[-1]), 250)        
         v_c = self.cavity_velocity(all_Ks) # in micrometer / fs
