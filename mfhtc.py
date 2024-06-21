@@ -25,6 +25,7 @@ try:
 except ModuleNotFoundError:
     # colored traceback not supported
     pass
+from decimal import Decimal
 
 logger = logging.getLogger(__name__)
 
@@ -469,7 +470,7 @@ class HTC:
             dt = self.params['dt']
         if y0 is None:
             y0 = self.initial_state()
-        t_eval = np.arange(ti, tf+dt/2, dt)
+        t_eval = 1e-15*np.arange(ti, tf+dt/2, dt) # convert to femptoseconds
         ivp = solve_ivp(self.eoms, [ti,tf], y0, t_eval=t_eval,
                         method='DOP853',
                         atol=1e-8,
@@ -650,7 +651,6 @@ class HTC:
         
     def group_velocity_expected(self):
         """Expected lower polariton group velocity in units of micrometer / fs"""        
-        #mum_eV_to_mum_fs = 1e-15 * (constants.econstants.hbar) # conversion from micrometers / eV to micrometer / fs
         exciton = self.params['exciton']
         all_Ks = np.linspace(-1.5*np.abs(self.Ks[0]), 1.5*np.abs(self.Ks[-1]), 250)        
         v_c = self.cavity_velocity(all_Ks) # in micrometer / fs
@@ -663,13 +663,6 @@ class HTC:
         return v_c, v_L, v_U
 
     def plot_group_velocities(self, savefig = False):
-        #mum_ev_s_to_mum_fs = 1e-15 * (constants.e/constants.hbar) # conversion from micrometer ev (?) / s to micrometer / fs
-        #omegas = self.omega(self.Ks)
-        #omega_c = self.params['omega_c']
-        #ep_omegas = self.params['epsilon'] - omegas
-        #xis = 0.5 * np.sqrt(ep_omegas**2 + self.params['gSqrtN']**2)
-        #epLs = 0.5 * (self.params['epsilon'] + omegas) - xis # Lower polariton energies
-        #epL_diffs =  mum_ev_s_to_mum_fs * np.gradient(epLs, 1) # numerical derivative
         all_Ks = np.linspace(-1.5*np.abs(self.Ks[0]), 1.5*np.abs(self.Ks[-1]), 250)        
         vc, vgL, vgU = self.group_velocity_expected()
         fig, ax = plt.subplots(1,1,figsize = (6,4), layout = 'tight')
@@ -684,7 +677,6 @@ class HTC:
         ax.legend()
         if savefig:
             plt.savefig(fname = 'dispersion.jpg', format = 'jpg')
-            
         
     def plot_evolution(self, savefig = False, tf = 1.0, fixed_position_index = 6, kspace = False):
         times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables(tf, fixed_position_index, kspace = kspace)
@@ -702,9 +694,11 @@ class HTC:
         if savefig:
             plt.savefig(fname = 'evolution.jpg', format = 'jpg')
 
-    def plot_waterfall(self, n_L = False, n_B = False, n_k = False, savefig = False, tf = 101.1, kspace = False, legend = False, step = 10, threeD = False):
+    def plot_waterfall(self, n_L = False, n_B = False, n_k = False, savefig = False, tf = 101.1, kspace = False, legend = False, step = 100, threeD = False):
         step = 2*step*self.dt
         slices = np.arange(0.0, tf, step)
+        slices *= 1e-15 # convert to femptoseconds
+        print(slices)
         times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables(tf, kspace = kspace)
         fig = plt.figure(figsize=(10,6), layout = 'tight')
         if threeD:
@@ -738,16 +732,22 @@ class HTC:
             n_i = n_arr[i*self.Nk:(i+1)*self.Nk]
             n_max = np.append(n_max, self.Ks[np.where(n_i == np.max(n_i))])
             if threeD:
-                ax.plot(self.Ks, n_i, label = f't = {slices[i]}', zdir = 'y', zs=slices[i], zorder = (len(slices)-i), color=colors[i])
-                ax.set_ylabel('t')
+                if kspace:
+                    ax.plot(self.Ks, n_i, label = f"t = {slices[i]:.2E}", zdir = 'y', zs=slices[i], zorder = (len(slices)-i), color=colors[i])
+                    ax.set_ylabel('t')
+                else:
+                    ax.plot(self.rs, n_i, label = f"t = {slices[i]:.2E}", zdir = 'y', zs=slices[i], zorder = (len(slices)-i), color=colors[i])
             else:
-                ax.plot(self.Ks, n_i + i * offset, label = f't = {slices[i]}', color=colors[i])
+                if kspace:
+                    ax.plot(self.Ks, n_i + i * offset, label = f't = {slices[i]:.2E}', color=colors[i])
+                else:
+                    ax.plot(self.rs, n_i + i * offset, label = f't = {slices[i]:.2E}', color=colors[i])
         if kspace:
-            ax.set_xlabel('$k$')
+            ax.set_xlabel('$k [\mu m^{-1}]$')
         else:
-            ax.set_xlabel('$r_n$')
+            ax.set_xlabel('$r_n [\mu m]$')
         ax.set_title('Time Snapshots of Wavepacket Evolution')
-        #ax.set_xlim([-3, 3])
+        #ax.set_xlim([3.5, 6])
         if legend:
             ax.legend()
         if savefig:
