@@ -741,7 +741,7 @@ class HTC:
                 if kspace:
                     ax.plot(self.Ks, n_i + i * offset, label = f't = {slices[i]:.2E}', color=colors[i])
                 else:
-                    ax.plot(self.rs, n_i + i * offset, label = f't = {slices[i]:.2E}', color=colors[i])
+                    ax.plot(self.Ks*self.params['delta_r'], n_i + i * offset, label = f't = {slices[i]:.2E}', color=colors[i])
         if kspace:
             ax.set_xlabel('$k [\mu m^{-1}]$')
         else:
@@ -887,4 +887,4 @@ if __name__ == '__main__':
     #htc.calculate_evolved_observables(tf = 2.1, fixed_position_index = 5)
     #htc.plot_evolution(tf = 100.1, savefig = True, fixed_position_index = 16, kspace = False)
     #htc.plot_initial_populations(kspace = False)
-    #htc.plot_waterfall(legend = True, n_L = True)
+    #htc.plot_waterfall(legend = True, n_L = True, step = 10)
