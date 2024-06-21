@@ -645,7 +645,7 @@ class HTC:
 
     def cavity_velocity(self, K):
         """Cavity group velocity in units of micrometer / fs"""
-        v_c = (1e6 * 1e-15) * (constants.hbar/constants.e) *  self.c * self.K_factor * K / np.sqrt(1 + self.K_factor**2 * K**2) # in micrometer / fs (self.c in m/s; * self.K_factor * K in eV)
+        v_c = (1e6 * 1e-15) * self.c * self.K_factor * K / np.sqrt(1 + self.K_factor**2 * K**2) # in micrometer / fs (self.c in m/s; * self.K_factor * K in eV)
         return v_c
         
     def group_velocity_expected(self):
