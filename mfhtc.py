@@ -645,12 +645,12 @@ class HTC:
 
     def cavity_velocity(self, K):
         """Cavity group velocity in units of micrometer / fs"""
-        v_c = (1e6 * 1e-15) * (constants.e/constants.hbar) *  self.c * self.K_factor * K / np.sqrt(1 + self.K_factor**2 * K**2) # in micrometer / fs (self.c in m/s; * self.K_factor * K in eV)
+        v_c = (1e6 * 1e-15) * (constants.hbar/constants.e) *  self.c * self.K_factor * K / np.sqrt(1 + self.K_factor**2 * K**2) # in micrometer / fs (self.c in m/s; * self.K_factor * K in eV)
         return v_c
         
     def group_velocity_expected(self):
         """Expected lower polariton group velocity in units of micrometer / fs"""        
-        #mum_eV_to_mum_fs = 1e-15 * (constants.hbar/constants.e) # conversion from micrometers / eV to micrometer / fs
+        #mum_eV_to_mum_fs = 1e-15 * (constants.econstants.hbar) # conversion from micrometers / eV to micrometer / fs
         exciton = self.params['exciton']
         all_Ks = np.linspace(-1.5*np.abs(self.Ks[0]), 1.5*np.abs(self.Ks[-1]), 250)        
         v_c = self.cavity_velocity(all_Ks) # in micrometer / fs
