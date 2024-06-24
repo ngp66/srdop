@@ -679,8 +679,8 @@ class HTC:
     def cavity_velocity(self, K):
         """Calculates cavity group velocity in units of micrometer/fs.
         
-           Inputs:  K[array of floats] - wavenumbers K = k*2pi/L in units inverse micrometers
-           Outputs: v_c [array of floats] - cavity velocity at each K value in units micrometer/fs"""
+        Inputs:  K[array of floats] - wavenumbers K = k*2pi/L in units inverse micrometers
+        Outputs: v_c [array of floats] - cavity velocity at each K value in units micrometer/fs"""
         
         v_c = (1e6 * 1e-15) * self.c * self.K_factor * K / np.sqrt(1 + self.K_factor**2 * K**2) # in micrometer / fs (self.c in m/s; * self.K_factor * K in eV)
         return v_c
@@ -689,8 +689,8 @@ class HTC:
         """Calculates theoretical group velocity as gradient of lower/upper polariton population
            in units of micrometer/fs.
         
-           Outputs: v_c, v_L, v_U [arrays of floats] - arrays of cavity lower and upper polariton 
-                    velocities at each K value in units micrometer/fs"""
+        Outputs: v_c, v_L, v_U [arrays of floats] - arrays of cavity lower and upper polariton 
+                 velocities at each K value in units micrometer/fs"""
         
         exciton = self.params['exciton']
         all_Ks = np.linspace(-1.5*np.abs(self.Ks[0]), 1.5*np.abs(self.Ks[-1]), 250)        
@@ -706,7 +706,7 @@ class HTC:
     def plot_group_velocities(self, savefig = False):
         """Plots cavity velocity and theoretical group velocities of upper and lower polariton as a function of wavenumber K = k*2*pi/L.
 
-           Inputs: savefig [bool] - if True, saves plot as 'dispersion.jpg'"""
+        Inputs:  savefig [bool] - if True, saves plot as 'dispersion.jpg'"""
         
         all_Ks = np.linspace(-1.5*np.abs(self.Ks[0]), 1.5*np.abs(self.Ks[-1]), 250)        
         vc, vgL, vgU = self.group_velocity_expected()
@@ -740,6 +740,21 @@ class HTC:
             plt.savefig(fname = 'evolution.jpg', format = 'jpg')
 
     def plot_waterfall(self, n_L = False, n_B = False, n_k = False, savefig = False, tf = 101.1, kspace = False, legend = False, step = 100, threeD = False):
+        """Plots selected time snapshot of the evolution of either the lower polariton, the bright or the photon population as a waterfall plot.
+
+        Inputs:  n_L [bool] - if True, plot lower polariton population
+                 n_B [bool] - if True, plot bright population
+                 n_k [bool] - if True, plot photon population
+                 Note only one of n_L, n_B, n_k can be specified at a time.
+                 savefig [bool] - if True, saves plot as 'plot_waterfall.jpg'
+                 tf [float] - final time for the evolution of the wavepacket in seconds (transformation to femtoseconds performed internally by code)
+                 kspace [bool] - if True, time snapshots plotted over the array of K-values self.Ks. If False, plot in real space
+                 legend [bool] - if True, include legend with times of the time snapshots
+                 step [float] - time step that defines array of snapshot times. Although full evolution is calculated, only snapshots at times separated
+                 by 2*step*self.dt are plotted
+                 threeD [bool] - if True, plot the time snapshots on a 3D plot rather than a 2D waterfall plot
+        Outputs: r_of_nmax [array of floats] - array of r/k values that give the location of the peak of the wavepacket distribution at each time snapshot"""
+        
         step = 2*step*self.dt
         slices = np.arange(0.0, tf, step)
         times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables(tf, kspace = kspace)
@@ -781,12 +796,14 @@ class HTC:
                     ax.plot(self.Ks, n_i, label = f"t = {slices[i]:.2E}", zdir = 'y', zs=slices[i], zorder = (len(slices)-i), color=colors[i])
                     ax.set_ylabel('t')
                 else:
-                    ax.plot(self.rs, n_i, label = f"t = {slices[i]:.2E}", zdir = 'y', zs=slices[i], zorder = (len(slices)-i), color=colors[i])
+                    ax.plot(self.Ks*self.params['delta_r'], n_i, label = f"t = {slices[i]:.2E}", zdir = 'y', zs=slices[i], zorder = (len(slices)-i), color=colors[i])
+                    r_of_nmax *= self.params['delta_r']
             else:
                 if kspace:
                     ax.plot(self.Ks, n_i + i * offset, label = f't = {slices[i]:.2E}', color=colors[i])
                 else:
                     ax.plot(self.Ks*self.params['delta_r'], n_i + i * offset, label = f't = {slices[i]:.2E}', color=colors[i])
+                    r_of_nmax *= self.params['delta_r']
         if kspace:
             ax.set_xlabel('$k [\mu m^{-1}]$')
         else:
