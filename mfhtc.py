@@ -503,6 +503,7 @@ class HTC:
 
     def calculate_n_bright_real(self, l0, lp): #, kspace = False):
         """Calculates population of bright exciton state (in real space)."""
+        
         zlp = contract('i,in->n', self.consts['zetap'], lp) # zeta(i+)<lambda(i+)>
         zzlplp = np.outer(zlp, np.conj(zlp)) # zeta(i+)zeta(j+)<lambda(i+)><lambda(j-)>
         zzzl0 = contract('a,an->n', self.consts['zetazeta'], l0)
@@ -513,6 +514,7 @@ class HTC:
     def calculate_upper_lower_polariton(self, a, lp, l0, Julia = False): 
         """Calculate coherences <sigma_k'(+)sigma_k(-)> and <a_k sigma_k(+)>, 
         as well as upper and lower polariton populations, all in k-space."""
+        
         gp = self.gp
         z011 = gp.z_tensor((0,1,1))
         sNm = np.sqrt(self.Nm)
@@ -560,7 +562,8 @@ class HTC:
         
         Inputs:  state [array of floats] - array (a, lp, l) of length self.state_length. To get the correct 
                  flattening and dimensions, pass state to self.split_reshape_return()
-                 kspace [bool] - if True, calculate observables in kspace. Note that sigsig, asig_k always in k space
+                 kspace [bool] - if True, calculate observables in kspace. If False, calculate in real space
+                 Note that sigsig, asig_k always in k space
         Outputs: n_k, n_M, n_L, n_U, n_B, n_D, sigsig, asig_k [arrays of floats] - arrays of photon, molecular, lower
                  polariton, upper polariton, bright, dark populations, coherences <sigma_k'(+) sigma_k(-)> and 
                  <a_k' sigma_k(+)> respectively for all k and k' values""" 
@@ -593,7 +596,8 @@ class HTC:
         
         Inputs:  state [array of floats] - array (a, lp, l) of length self.state_length. To get the correct 
                  flattening and dimensions, pass state to self.split_reshape_return()
-                 kspace [bool] - if True, calculate observables in kspace. Note that sigsig_diag, asig_k_diag always in k space
+                 kspace [bool] - if True, calculate observables in kspace. If False, calculate in real space
+                 Note that sigsig_diag, asig_k_diag always in k space
         Outputs: n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag [arrays of floats] - 
                  arrays of diagonal values of photon, molecular, lower polariton, upper polariton, bright, dark populations, 
                  coherences <sigma_k(+) sigma_k(-)> and <a_k sigma_k(+)> respectively"""
@@ -627,7 +631,8 @@ class HTC:
         
         Inputs:  tf [float] - integration time in seconds
                  fixed_position_index [int] - if specified, evolution is returned only for specific k/r value
-                 kspace [bool] - if True, calculate observables in kspace. Note that sigsig_arr always returned in k space
+                 kspace [bool] - if True, calculate observables in k space. If False, calculate in real space
+                 Note that sigsig_arr always returned in k space
         Outputs: t_fs, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr [arrays of floats]: arrays of 
                  integration times, photon, molecular, bright, dark, lower and upper polariton populations and 
                  coherences <sigma_k(+) sigma_k(-)> respectively for each time step of the evolution"""
@@ -724,6 +729,13 @@ class HTC:
             plt.savefig(fname = 'dispersion.jpg', format = 'jpg')
         
     def plot_evolution(self, savefig = False, tf = 1.0, fixed_position_index = 6, kspace = False):
+        """Plots evolution of photonic, bright and dark state populations over time TF at given position FIXED_POSITION_INDEX.
+
+        Inputs:  savefig [bool] - if True, saves plot as 'evolution.jpg'
+                 tf [float] - final time of the evolution
+                 fixed_position_index [int] - index of the r/k array at which the evolution is evaluated
+                 kspace [bool] - if True, plot in k space. If False, plot in real space"""
+        
         times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables(tf, fixed_position_index, kspace = kspace)
         fig, ax = plt.subplots(1,1,figsize = (6,4))
         ax.plot(times, n_B_arr, label = '$n_{B}$')
