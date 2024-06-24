@@ -622,8 +622,8 @@ class HTC:
         return n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag
 
     def calculate_evolved_observables(self, tf = None, fixed_position_index = False, kspace = False):
-    """Evolves self.initial_state() from time ti = 0.0 to time tf in time steps self.dt. Calculates 
-       diagonal elements of populations for each time step in either real or k space.
+        """Evolves self.initial_state() from time ti = 0.0 to time tf in time steps self.dt. Calculates 
+        diagonal elements of populations for each time step in either real or k space.
         
         Inputs:  tf [float] - integration time in seconds
                  fixed_position_index [int] - if specified, evolution is returned only for specific k/r value
