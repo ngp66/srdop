@@ -489,12 +489,13 @@ class HTC:
         #state_t = ivp.t[-1]
         return state_f
 
-    def calculate_n_photon(self, a):
-        """Calculates photonic population in real space.
+    def calculate_n_photon(self, a, kspace = False):
+        """Calculates photonic population in k space or real space.
         
            Inputs:  a [array of floats] - values a_k(tilda) for all wavectors self.Ks
-           Outputs: n_k [array of floats] - photon populations at all positions in real space"""
-        
+           Outputs: n_k [array of floats] - photon populations at all positions/wavevectors"""
+        if kspace:
+            return np.outer(np.conj(a),a)*self.Nm 
         a_r = ifft(a, norm = 'ortho')
         n_k = np.conj(a_r)*a_r*self.Nm
         return n_k
