@@ -686,7 +686,12 @@ class HTC:
         return v_c
         
     def group_velocity_expected(self):
-        """Expected lower polariton group velocity in units of micrometer / fs"""        
+        """Calculates theoretical group velocity as gradient of lower/upper polariton population
+           in units of micrometer/fs.
+        
+           Outputs: v_c, v_L, v_U [arrays of floats] - arrays of cavity lower and upper polariton 
+                    velocities at each K value in units micrometer/fs"""
+        
         exciton = self.params['exciton']
         all_Ks = np.linspace(-1.5*np.abs(self.Ks[0]), 1.5*np.abs(self.Ks[-1]), 250)        
         v_c = self.cavity_velocity(all_Ks) # in micrometer / fs
@@ -699,6 +704,10 @@ class HTC:
         return v_c, v_L, v_U
 
     def plot_group_velocities(self, savefig = False):
+        """Plots cavity velocity and theoretical group velocities of upper and lower polariton as a function of wavenumber K = k*2*pi/L.
+
+           Inputs: savefig [bool] - if True, saves plot as 'dispersion.jpg'"""
+        
         all_Ks = np.linspace(-1.5*np.abs(self.Ks[0]), 1.5*np.abs(self.Ks[-1]), 250)        
         vc, vgL, vgU = self.group_velocity_expected()
         fig, ax = plt.subplots(1,1,figsize = (6,4), layout = 'tight')
