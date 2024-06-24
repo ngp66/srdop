@@ -470,7 +470,7 @@ class HTC:
             dt = self.params['dt']
         if y0 is None:
             y0 = self.initial_state()
-        t_eval = 1e-15*np.arange(ti, tf+dt/2, dt) # convert to femptoseconds
+        t_eval = np.arange(ti, tf, dt) # in natural units +dt/2
         ivp = solve_ivp(self.eoms, [ti,tf], y0, t_eval=t_eval,
                         method='DOP853',
                         atol=1e-8,
@@ -545,13 +545,26 @@ class HTC:
         return n_k, n_L, n_U, sigsig, asig_k
 
     def Julia_comparison(self):
+        """Returns elements a_k, sigma_k(+), <sigma_k(+) sigma_k(-)> for building equivalent initial state 
+           in Julia code. Note that Julia code model contains single photon mode i.e. Q0 = 0 required.
+            
+        Outputs: a, sig_plus, sigsig [floats] - values of a_k, sigma_k(+), <sigma_k(+) sigma_k(-)> for self.initial_state()"""
+        
         state = self.initial_state() # build initial state
         a, lp, l0 = self.split_reshape_return(state)
         n_k, n_L, n_U, sigsig, sig_plus, asig_k = self.calculate_upper_lower_polariton(a, lp, l0, Julia = True)
         return a, sig_plus, sigsig
         
     def calculate_observables(self, state, kspace = True):
-        """Calculate coherences, polariton, photon and molecular numbers for a given state. n_L, n_U, sigsig, asig_k always in k space; n_M and n_B always in real space, n_k optional in real space.""" 
+        """Calculates coherences, polariton, photon and molecular populations for a given state. 
+        
+        Inputs:  state [array of floats] - array (a, lp, l) of length self.state_length. To get the correct 
+                 flattening and dimensions, pass state to self.split_reshape_return()
+                 kspace [bool] - if True, calculate observables in kspace. Note that sigsig, asig_k always in k space
+        Outputs: n_k, n_M, n_L, n_U, n_B, n_D, sigsig, asig_k [arrays of floats] - arrays of photon, molecular, lower
+                 polariton, upper polariton, bright, dark populations, coherences <sigma_k'(+) sigma_k(-)> and 
+                 <a_k' sigma_k(+)> respectively for all k and k' values""" 
+        
         a, lp, l0 = self.split_reshape_return(state) 
         n_M = self.calculate_n_molecular_real(l0) # molecular population (real space)
         n_B = self.calculate_n_bright_real(l0, lp) # bright state population (real space)
@@ -575,6 +588,16 @@ class HTC:
         return n_k, n_M, n_L, n_U, sigsig, asig_k, n_B, n_D
 
     def calculate_diagonal_elements(self, state, kspace):
+        """Calculates diagonal elements of the coherence, polariton, photon and molecular population
+           arrays for a given state and asserts that relevant elements have real values. 
+        
+        Inputs:  state [array of floats] - array (a, lp, l) of length self.state_length. To get the correct 
+                 flattening and dimensions, pass state to self.split_reshape_return()
+                 kspace [bool] - if True, calculate observables in kspace. Note that sigsig_diag, asig_k_diag always in k space
+        Outputs: n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag [arrays of floats] - 
+                 arrays of diagonal values of photon, molecular, lower polariton, upper polariton, bright, dark populations, 
+                 coherences <sigma_k(+) sigma_k(-)> and <a_k sigma_k(+)> respectively"""
+        
         n_k, n_M, n_L, n_U, sigsig, asig_k, n_B, n_D = self.calculate_observables(state, kspace)
         assert np.allclose(np.diag(n_M).imag, 0.0), "Molecular population has imaginary components"
         assert np.allclose(np.diag(n_k).imag, 0.0), "Photon population has imaginary components"
@@ -599,7 +622,16 @@ class HTC:
         return n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag
 
     def calculate_evolved_observables(self, tf = None, fixed_position_index = False, kspace = False):
-        t_fs = np.arange(0.0, tf, step = self.dt) # create array of integration times 
+    """Evolves self.initial_state() from time ti = 0.0 to time tf in time steps self.dt. Calculates 
+       diagonal elements of populations for each time step in either real or k space.
+        
+        Inputs:  tf [float] - integration time in seconds
+                 fixed_position_index [int] - if specified, evolution is returned only for specific k/r value
+                 kspace [bool] - if True, calculate observables in kspace. Note that sigsig_arr always returned in k space
+        Outputs: t_fs, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr [arrays of floats]: arrays of 
+                 integration times, photon, molecular, bright, dark, lower and upper polariton populations and 
+                 coherences <sigma_k(+) sigma_k(-)> respectively for each time step of the evolution"""
+        
         state = self.initial_state() # build initial state
         t_fs, y_vals = self.full_integration(tf, state, ti = 0.0)
         y_vals = y_vals.flatten()
@@ -645,7 +677,11 @@ class HTC:
         return t_fs, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr # sigsig_arr, asig_k_arr
 
     def cavity_velocity(self, K):
-        """Cavity group velocity in units of micrometer / fs"""
+        """Calculates cavity group velocity in units of micrometer/fs.
+        
+           Inputs:  K[array of floats] - wavenumbers K = k*2pi/L in units inverse micrometers
+           Outputs: v_c [array of floats] - cavity velocity at each K value in units micrometer/fs"""
+        
         v_c = (1e6 * 1e-15) * self.c * self.K_factor * K / np.sqrt(1 + self.K_factor**2 * K**2) # in micrometer / fs (self.c in m/s; * self.K_factor * K in eV)
         return v_c
         
@@ -697,9 +733,9 @@ class HTC:
     def plot_waterfall(self, n_L = False, n_B = False, n_k = False, savefig = False, tf = 101.1, kspace = False, legend = False, step = 100, threeD = False):
         step = 2*step*self.dt
         slices = np.arange(0.0, tf, step)
-        slices *= 1e-15 # convert to femptoseconds
-        print(slices)
         times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables(tf, kspace = kspace)
+        times *= self.EV_TO_FS # convert to femtoseconds for plotting
+        slices *= self.EV_TO_FS # convert to femtoseconds for plotting
         fig = plt.figure(figsize=(10,6), layout = 'tight')
         if threeD:
             ax = fig.add_subplot(projection='3d')
@@ -726,11 +762,11 @@ class HTC:
                 ax.set_ylabel('$n_{L}(r_n)$')
         assert isinstance(n_arr, np.ndarray), "Please, specify one of n_L, n_B and n_k"
         offset = 0.1 * np.max(n_arr)
-        n_max = np.array([])
+        r_of_nmax = np.array([])
         for i in range(len(slices)):
             index = np.where(times == slices[i])
             n_i = n_arr[i*self.Nk:(i+1)*self.Nk]
-            n_max = np.append(n_max, self.Ks[np.where(n_i == np.max(n_i))])
+            r_of_nmax = np.append(r_of_nmax, self.Ks[np.where(n_i == np.max(n_i))])
             if threeD:
                 if kspace:
                     ax.plot(self.Ks, n_i, label = f"t = {slices[i]:.2E}", zdir = 'y', zs=slices[i], zorder = (len(slices)-i), color=colors[i])
@@ -752,7 +788,7 @@ class HTC:
             ax.legend()
         if savefig:
             plt.savefig(fname = 'plot_waterfall.jpg', format = 'jpg')
-        return n_max
+        return r_of_nmax
         
     def plot_initial_populations(self, savefig = False, kspace = False):
         state_i = self.initial_state()
