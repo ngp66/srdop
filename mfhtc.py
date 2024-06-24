@@ -784,8 +784,8 @@ class HTC:
         
         step = 2*step*self.dt
         slices = np.arange(0.0, tf, step)
+        tf *= self.EV_TO_FS
         times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables(tf, kspace = kspace)
-        times *= self.EV_TO_FS # convert to femtoseconds for plotting
         slices *= self.EV_TO_FS # convert to femtoseconds for plotting
         fig = plt.figure(figsize=(10,6), layout = 'tight')
         if threeD:
@@ -842,14 +842,55 @@ class HTC:
         if savefig:
             plt.savefig(fname = 'plot_waterfall.jpg', format = 'jpg')
         return r_of_nmax
+
+    def plot_peak_velocities(self, savefig = False, tf = 100, kspace = False):
+        """Plots displacement and velocity of peak of lower polariton population.
         
+           Inputs:  savefig [bool] - if True, saves plots as 'state_i.jpg' and 'velocity_of_peak.jpg' 
+                    tf [float] - integration time in seconds (conversion to femtoseconds performed internally)
+                    kspace [bool] - if True, time snapshots plotted over the array of K-values self.Ks. If False, plot in real space
+           Outputs: v_of_nmax [array of floats] - velocities of the peak at each integration time"""
+        
+        tf *= self.EV_TO_FS
+        times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables(tf, kspace = kspace)
+        r_of_nmax = np.array([])
+        for i in range(len(times)-1):
+            n_i = n_L_arr[i*self.Nk:(i+1)*self.Nk]
+            r_of_nmax = np.append(r_of_nmax, self.Ks[np.where(n_i == np.max(n_i))])
+        dt = times[1] - times[0]
+        v_of_nmax = np.gradient(r_of_nmax, dt)
+        fig, ax = plt.subplots(2,1,figsize = (12,10), sharex = True)
+        ax[0].plot(times[:(len(times)-1)], r_of_nmax)
+        ax[0].set_xlabel('time [$fs$]')
+        ax[0].set_ylabel('x [$\mu m$]')
+        ax[1].plot(times[:(len(times)-1)], v_of_nmax)
+        ax[1].set_xlabel('time [$fs$]')
+        ax[1].set_ylabel('velocity [$\mu m fs^{-1}$]')
+        fig.suptitle('Displacement and Velocity of the Peak of the Wavepacket')
+        if savefig:
+            plt.savefig(fname = 'velocity_of_peak.jpg', format = 'jpg')
+        return v_of_nmax
+
+    def plot_v_rms(self, savefig = False, tf = 100, kspace = False):
+        tf *= self.EV_TO_FS
+        times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables(tf, kspace = kspace)
+        r_of_nmax = np.array([])
+        for i in range(len(times)-1):
+            n_i = n_L_arr[i*self.Nk:(i+1)*self.Nk]
+            r_of_nmax = np.append(r_of_nmax, self.Ks[np.where(n_i == np.max(n_i))])
+        dt = times[1] - times[0]
+        v_of_nmax = np.gradient(r_of_nmax, dt)
+        fig, ax = plt.subplots(2,1,figsize = (12,10), sharex = True)
+        
+        return v_rms
+    
     def plot_initial_populations(self, savefig = False, kspace = False):
         """Plots upper, lower polariton and photonic populations on one figure in either k space or real space. 
            Plots molecular, bright and dark populations in real space on another figure.
 
-        Inputs:  savefig [bool] - if True, saves plots as 'state_i.jpg' and 'brightdark_populations.jpg'
-                 kspace [bool] - if True, plot first figure in k space. If False, plot figure in real space 
-                 Note that second figure is always in real space"""
+           Inputs:  savefig [bool] - if True, saves plots as 'state_i.jpg' and 'brightdark_populations.jpg'
+                    kspace [bool] - if True, plot first figure in k space. If False, plot figure in real space 
+                    Note that second figure is always in real space"""
         
         state_i = self.initial_state()
         n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag = self.calculate_diagonal_elements(state_i, kspace)
