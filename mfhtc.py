@@ -327,9 +327,10 @@ class HTC:
         return (1/Z) * np.diag(ps)
         
     def initial_state(self):
-        """Return initial state on the lower polariton branch as a flattened
-        1D array [<a_k>, <lambda_n^i+>, <lambda_n^i0>]"""
-        #state = np.zeros(self.state_length, dtype=complex) 
+        """Returns initial state as a Gaussian wavepacket on the lower polariton branch.
+        
+           Outputs: state [array of floats] - flattened 1D array [<a_k>, <lambda_n^i+>, <lambda_n^i0>] that defines the initial state"""
+        
         rho0_vib = self.thermal_rho_vib(self.params['T']) # molecular vibrational density matrix
         shifted_Ks = np.fft.ifftshift(self.Ks) 
         alpha_k = self.params['A']*np.exp(-(shifted_Ks-self.params['k_0'])**2 / (2*self.params['sig_0']**2)) # create gaussian profile at k values
@@ -357,6 +358,7 @@ class HTC:
     def split_reshape_return(self, state, check_rescaled=False, copy=False):
         """Return views of variables <a_k>, <lambda_n^i+>, <lambda_n^i0>
         in state reshaped into conventional multidimensional arrays."""
+        
         split = np.split(state, self.state_split_list) # a, lp, l0
         # reshape each array (len+1 as rescale_int removed)
         reshaped = [split[i].reshape(self.state_reshape_list[i]) for i in range(len(self.state_reshape_list))]
@@ -367,8 +369,12 @@ class HTC:
         return reshaped
         
     def eoms(self, t, state):
-        """Equations of motion as in mf_eoms_fourier.pdf"""
-        #state = self.initial_state()
+        """Equations of motion as in mf_eoms_fourier.pdf
+        
+           Inputs: t [float]: time. Variable used by solve_ivp in integration routines
+                   state [array of floats]: initial conditions. See self.initial_state() for correct shape and dimensions
+           Outputs: dy_state [array of floats]: state evolved by the equations of motion. Same shape as STATE"""
+        
         C = self.coeffs
         a, lp, l0 = self.split_reshape_return(state) 
         # Calculate DFT
@@ -466,7 +472,7 @@ class HTC:
             dt = self.params['dt']
         if y0 is None:
             y0 = self.initial_state()
-        t_eval = np.arange(ti, tf, dt) # in natural units +dt/2
+        t_eval = np.arange(ti, tf, dt) # in natural units 
         ivp = solve_ivp(self.eoms, [ti,tf], y0, t_eval=t_eval,
                         method='DOP853',
                         atol=1e-8,
@@ -924,8 +930,6 @@ class HTC:
         print(f'       tf = {tf}')
         if julia_fp is None:
             return
-        #ts, ys = htc.full_integration(tf)
-        #ns = np.abs(ys[0,:])**2
         ts, ys = htc.stepwise_integration(tf)
         ns = np.abs([y[0] for y in ys])**2
         fig, ax = plt.subplots(figsize=(4,4), constrained_layout=True)
