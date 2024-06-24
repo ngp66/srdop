@@ -627,7 +627,7 @@ class HTC:
 
     def calculate_evolved_observables(self, tf = None, fixed_position_index = False, kspace = False):
         """Evolves self.initial_state() from time ti = 0.0 to time tf in time steps self.dt. Calculates 
-        diagonal elements of populations for each time step in either real or k space.
+           diagonal elements of populations for each time step in either real or k space.
         
         Inputs:  tf [float] - integration time in seconds
                  fixed_position_index [int] - if specified, evolution is returned only for specific k/r value
@@ -829,6 +829,13 @@ class HTC:
         return r_of_nmax
         
     def plot_initial_populations(self, savefig = False, kspace = False):
+        """Plots upper, lower polariton and photonic populations on one figure in either k space or real space. 
+           Plots molecular, bright and dark populations in real space on another figure.
+
+        Inputs:  savefig [bool] - if True, saves plots as 'state_i.jpg' and 'brightdark_populations.jpg'
+                 kspace [bool] - if True, plot first figure in k space. If False, plot figure in real space 
+                 Note that second figure is always in real space """
+        
         state_i = self.initial_state()
         n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag = self.calculate_diagonal_elements(state_i, kspace)
         fig1, ax1 = plt.subplots(5,1,figsize = (12,10),sharex = True)
