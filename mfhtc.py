@@ -655,7 +655,7 @@ class HTC:
         
         state = self.initial_state() # build initial state
         t_fs, y_vals = self.full_integration(tf, state, ti = 0.0)
-        y_vals = y_vals.flatten()
+        y_vals = y_vals.T
         n_k_arr, n_M_arr, n_L_arr, n_U_arr, n_B_arr, n_D_arr, sigsig_arr, asig_k_arr = self.calculate_diagonal_elements(state, kspace) # calculate observables for initial state
         n_k_arr = n_k_arr[fixed_position_index]
         n_M_arr = n_M_arr[fixed_position_index]
@@ -665,8 +665,8 @@ class HTC:
         n_D_arr = n_D_arr[fixed_position_index]
         sigsig_arr = sigsig_arr[fixed_position_index]
         asig_k_arr = asig_k_arr[fixed_position_index]
-        for i in range(len(t_fs)-1):
-            state = y_vals[np.arange(i,i+self.state_length*len(t_fs), len(t_fs))]
+        for i in range(1,len(t_fs)):
+            state = y_vals[i]
             n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag = self.calculate_diagonal_elements(state, kspace) # calculate observables for evolved state
             n_k_arr = np.append(n_k_arr, n_k_diag[fixed_position_index])
             n_M_arr = np.append(n_M_arr, n_M_diag[fixed_position_index])
@@ -676,14 +676,13 @@ class HTC:
             n_D_arr = np.append(n_D_arr, n_D_diag[fixed_position_index])
             sigsig_arr = np.append(sigsig_arr, sigsig_diag[fixed_position_index])
             asig_k_arr = np.append(asig_k_arr, asig_k_diag[fixed_position_index])
-
-        assert len(n_k_arr) == self.Nk*(len(t_fs)), 'Length of evolved photonic population array does not have the required dimensions'
-        assert len(n_M_arr) == self.Nk*(len(t_fs)), 'Length of evolved molecular population array does not have the required dimensions'
-        assert len(n_L_arr) == self.Nk*(len(t_fs)), 'Length of evolved lower polariton population array does not have the required dimensions'
-        assert len(n_U_arr) == self.Nk*(len(t_fs)), 'Length of evolved upper polariton population array does not have the required dimensions'
-        assert len(n_B_arr) == self.Nk*(len(t_fs)), 'Length of evolved bright exciton population array does not have the required dimensions'
-        assert len(n_D_arr) == self.Nk*(len(t_fs)), 'Length of evolved dark exciton population array does not have the required dimensions'
-        return t_fs, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr # sigsig_arr, asig_k_arr
+        assert len(n_k_arr) == len(t_fs), 'Length of evolved photonic population array does not have the required dimensions'
+        assert len(n_M_arr) == len(t_fs), 'Length of evolved molecular population array does not have the required dimensions'
+        assert len(n_L_arr) == len(t_fs), 'Length of evolved lower polariton population array does not have the required dimensions'
+        assert len(n_U_arr) == len(t_fs), 'Length of evolved upper polariton population array does not have the required dimensions'
+        assert len(n_B_arr) == len(t_fs), 'Length of evolved bright exciton population array does not have the required dimensions'
+        assert len(n_D_arr) == len(t_fs), 'Length of evolved dark exciton population array does not have the required dimensions'
+        return t_fs, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr 
 
     def calculate_evolved_observables_all_k(self, tf = 100.0, kspace = False):
         """Evolves self.initial_state() from time ti = 0.0 to time tf in time steps self.dt. Calculates 
@@ -698,10 +697,10 @@ class HTC:
         
         state = self.initial_state() # build initial state
         t_fs, y_vals = self.full_integration(tf, state, ti = 0.0)
-        y_vals = y_vals.flatten()
+        y_vals = y_vals.T
         n_k_arr, n_M_arr, n_L_arr, n_U_arr, n_B_arr, n_D_arr, sigsig_arr, asig_k_arr = self.calculate_diagonal_elements(state, kspace) # calculate observables for initial state
-        for i in range(len(t_fs)):
-            state = y_vals[np.arange(i,i+self.state_length*len(t_fs), len(t_fs))]
+        for i in range(1,len(t_fs)):
+            state = y_vals[i] 
             n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag = self.calculate_diagonal_elements(state, kspace) # calculate observables for evolved state 
             n_k_arr = np.append(n_k_arr, n_k_diag)
             n_M_arr = np.append(n_M_arr, n_M_diag)
@@ -711,6 +710,12 @@ class HTC:
             n_D_arr = np.append(n_D_arr, n_D_diag)
             sigsig_arr = np.append(sigsig_arr, sigsig_diag)
             asig_k_arr = np.append(asig_k_arr, asig_k_diag)
+        assert len(n_k_arr) == self.Nk*len(t_fs), 'Length of evolved photonic population array does not have the required dimensions'
+        assert len(n_M_arr) == self.Nk*len(t_fs), 'Length of evolved molecular population array does not have the required dimensions'
+        assert len(n_L_arr) == self.Nk*len(t_fs), 'Length of evolved lower polariton population array does not have the required dimensions'
+        assert len(n_U_arr) == self.Nk*len(t_fs), 'Length of evolved upper polariton population array does not have the required dimensions'
+        assert len(n_B_arr) == self.Nk*len(t_fs), 'Length of evolved bright exciton population array does not have the required dimensions'
+        assert len(n_D_arr) == self.Nk*len(t_fs), 'Length of evolved dark exciton population array does not have the required dimensions'
         return t_fs, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr # sigsig_arr, asig_k_arr
         
     def cavity_velocity(self, K):
