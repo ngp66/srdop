@@ -804,7 +804,7 @@ class HTC:
                  threeD [bool] - if True, plot the time snapshots on a 3D plot rather than a 2D waterfall plot
         Outputs: r_of_nmax [array of floats] - array of r/k values that give the location of the peak of the wavepacket distribution at each time snapshot"""
         
-        step = 2*step*self.dt
+        #step = 2*step*self.dt
         slices = np.arange(0.0, tf, step)
         #tf *= self.EV_TO_FS
         times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables_all_k(tf, kspace = kspace)
@@ -856,7 +856,7 @@ class HTC:
                 if kspace:
                     ax.plot(self.Ks, n_i + i * offset, label = f't = {slices[i]:.2E}', color=colors[i])
                 else:
-                    ax.plot(self.Ks*self.params['delta_r'], n_i + i * offset, label = f't = {slices[i]:.2E}', color=colors[i])
+                    ax.plot(self.Ks*self.params['delta_r'], n_i + i * offset, label = f't = {slices[i]:.2E}', zorder = (len(slices)-i), color=colors[i])
                     r_of_nmax *= self.params['delta_r']
         if kspace:
             ax.set_xlabel('$k [\mu m^{-1}]$')
@@ -1024,7 +1024,7 @@ if __name__ == '__main__':
         'L': 10.0, # Crystal propagation length, inverse micro meters
         'nr': 1.0, # refractive index, sets effective speed of light c/nr
         'omega_c': 1.94, # omega_0 = 1.94eV (Fig S4C)
-        'epsilon': 2.14, # exciton energy, detuning omega_0-epsilon (0.2eV for model I in Xu et al. 2023)
+        'epsilon': 2.44, #214.1, # exciton energy, detuning omega_0-epsilon (0.2eV for model I in Xu et al. 2023)
         'gSqrtN': 0.15, # light-matter coupling
         'kappa_c': 0.0, #3e-3, # photon loss
         'Gam_z': 0.0, # molecular pure dephasing
@@ -1034,13 +1034,13 @@ if __name__ == '__main__':
         'omega_nu': 0.0, #0647, # vibrational energy spacing
         'T': 0.0, #26, # k_B T in eV (.0259=300K, .026=302K)
         'gam_nu': 0.0, #0.01, # vibrational damping rate
-        'initial_state': 'incoherent', # or incoherent
-        'A': 0.2, # amplitude of initial wavepacket
+        #'initial_state': 'incoherent', # or incoherent
+        'A': 0.08, # amplitude of initial wavepacket
         'k_0': 5.0, # central wavenumber of initial wavepacket
         'sig_0': 4.0, # s.d. of initial wavepacket
-        'atol': 1e-9, # solver tolerance
-        'rtol': 1e-6, # solver tolerance
-        'dt': 500, # determines interval at which solution is evaluated. Does not effect the accuracy of solution, only the grid at which observables are recorded
+        'atol': 1e-10, # solver tolerance
+        'rtol': 1e-10, # solver tolerance
+        'dt': 0.05, # determines interval at which solution is evaluated. Does not effect the accuracy of solution, only the grid at which observables are recorded
         'exciton': False, # if True, initial state is pure exciton; if False, a lower polariton initial state is created
         }
     
@@ -1050,4 +1050,4 @@ if __name__ == '__main__':
     #htc.calculate_evolved_observables(tf = 2.1, fixed_position_index = 5)
     #htc.plot_evolution(tf = 100.1, savefig = True, fixed_position_index = 16, kspace = False)
     #htc.plot_initial_populations(kspace = False)
-    htc.plot_waterfall(n_L = True, tf = 1000, step = 100, kspace = False, legend = True)
+    htc.plot_waterfall(n_L = True, tf = 100, step = 10, kspace = False, legend = True)
