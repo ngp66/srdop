@@ -421,8 +421,8 @@ class HTC:
                         t0=0.0,
                         y0=y0,
                         t_bound=tf,
-                        rtol=1e-8,
-                        atol=1e-7,
+                        rtol=1e-10,
+                        atol=1e-10,
                         )
         # Save initial state
         t_index = 0
@@ -641,9 +641,9 @@ class HTC:
         asig_k_diag = fftshift(np.diag(asig_k).real) # shift back so that k=0 component is at the center
         return n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag
 
-    def calculate_evolved_observables(self, tf = None, fixed_position_index = False, kspace = False):
+    def calculate_evolved_observables_fixed_k(self, tf = 100.0, fixed_position_index = 1, kspace = False):
         """Evolves self.initial_state() from time ti = 0.0 to time tf in time steps self.dt. Calculates 
-           diagonal elements of populations for each time step in either real or k space.
+           diagonal elements of populations for each time step in either real or k space and returns values for FIXED_POSITION_INDEX only.
         
         Inputs:  tf [float] - integration time in seconds
                  fixed_position_index [int] - if specified, evolution is returned only for specific k/r value
@@ -657,45 +657,62 @@ class HTC:
         t_fs, y_vals = self.full_integration(tf, state, ti = 0.0)
         y_vals = y_vals.flatten()
         n_k_arr, n_M_arr, n_L_arr, n_U_arr, n_B_arr, n_D_arr, sigsig_arr, asig_k_arr = self.calculate_diagonal_elements(state, kspace) # calculate observables for initial state
-        if fixed_position_index != None: # pick values of observables at fixed k/r value
-            n_k_arr = n_k_arr[fixed_position_index]
-            n_M_arr = n_M_arr[fixed_position_index]
-            n_L_arr = n_L_arr[fixed_position_index]
-            n_U_arr = n_U_arr[fixed_position_index]
-            n_B_arr = n_B_arr[fixed_position_index]
-            n_D_arr = n_D_arr[fixed_position_index]
-            sigsig_arr = sigsig_arr[fixed_position_index]
-            asig_k_arr = asig_k_arr[fixed_position_index]
+        n_k_arr = n_k_arr[fixed_position_index]
+        n_M_arr = n_M_arr[fixed_position_index]
+        n_L_arr = n_L_arr[fixed_position_index]
+        n_U_arr = n_U_arr[fixed_position_index]
+        n_B_arr = n_B_arr[fixed_position_index]
+        n_D_arr = n_D_arr[fixed_position_index]
+        sigsig_arr = sigsig_arr[fixed_position_index]
+        asig_k_arr = asig_k_arr[fixed_position_index]
         for i in range(len(t_fs)-1):
             state = y_vals[np.arange(i,i+self.state_length*len(t_fs), len(t_fs))]
             n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag = self.calculate_diagonal_elements(state, kspace) # calculate observables for evolved state
-            if fixed_position_index != False: # append with calculated observables at a fixed k/r value at each time step 
-                n_k_arr = np.append(n_k_arr, n_k_diag[fixed_position_index])
-                n_M_arr = np.append(n_M_arr, n_M_diag[fixed_position_index])
-                n_L_arr = np.append(n_L_arr, n_L_diag[fixed_position_index])
-                n_U_arr = np.append(n_U_arr, n_U_diag[fixed_position_index])
-                n_B_arr = np.append(n_B_arr, n_B_diag[fixed_position_index])
-                n_D_arr = np.append(n_D_arr, n_D_diag[fixed_position_index])
-                sigsig_arr = np.append(sigsig_arr, sigsig_diag[fixed_position_index])
-                asig_k_arr = np.append(asig_k_arr, asig_k_diag[fixed_position_index])
-            else: # append with calculated observables for all k/r values at each time step 
-                n_k_arr = np.append(n_k_arr, n_k_diag)
-                n_M_arr = np.append(n_M_arr, n_M_diag)
-                n_L_arr = np.append(n_L_arr, n_L_diag)
-                n_U_arr = np.append(n_U_arr, n_U_diag)
-                n_B_arr = np.append(n_B_arr, n_B_diag)
-                n_D_arr = np.append(n_D_arr, n_D_diag)
-                sigsig_arr = np.append(sigsig_arr, sigsig_diag)
-                asig_k_arr = np.append(asig_k_arr, asig_k_diag)
-        if fixed_position_index == None: # check that arrays of observables have the correct length
-            assert len(n_k_arr) == self.Nk*(len(t_fs)), 'Length of evolved photonic population array does not have the required dimensions'
-            assert len(n_M_arr) == self.Nk*(len(t_fs)), 'Length of evolved molecular population array does not have the required dimensions'
-            assert len(n_L_arr) == self.Nk*(len(t_fs)), 'Length of evolved lower polariton population array does not have the required dimensions'
-            assert len(n_U_arr) == self.Nk*(len(t_fs)), 'Length of evolved upper polariton population array does not have the required dimensions'
-            assert len(n_B_arr) == self.Nk*(len(t_fs)), 'Length of evolved bright exciton population array does not have the required dimensions'
-            assert len(n_D_arr) == self.Nk*(len(t_fs)), 'Length of evolved dark exciton population array does not have the required dimensions'
+            n_k_arr = np.append(n_k_arr, n_k_diag[fixed_position_index])
+            n_M_arr = np.append(n_M_arr, n_M_diag[fixed_position_index])
+            n_L_arr = np.append(n_L_arr, n_L_diag[fixed_position_index])
+            n_U_arr = np.append(n_U_arr, n_U_diag[fixed_position_index])
+            n_B_arr = np.append(n_B_arr, n_B_diag[fixed_position_index])
+            n_D_arr = np.append(n_D_arr, n_D_diag[fixed_position_index])
+            sigsig_arr = np.append(sigsig_arr, sigsig_diag[fixed_position_index])
+            asig_k_arr = np.append(asig_k_arr, asig_k_diag[fixed_position_index])
+
+        assert len(n_k_arr) == self.Nk*(len(t_fs)), 'Length of evolved photonic population array does not have the required dimensions'
+        assert len(n_M_arr) == self.Nk*(len(t_fs)), 'Length of evolved molecular population array does not have the required dimensions'
+        assert len(n_L_arr) == self.Nk*(len(t_fs)), 'Length of evolved lower polariton population array does not have the required dimensions'
+        assert len(n_U_arr) == self.Nk*(len(t_fs)), 'Length of evolved upper polariton population array does not have the required dimensions'
+        assert len(n_B_arr) == self.Nk*(len(t_fs)), 'Length of evolved bright exciton population array does not have the required dimensions'
+        assert len(n_D_arr) == self.Nk*(len(t_fs)), 'Length of evolved dark exciton population array does not have the required dimensions'
         return t_fs, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr # sigsig_arr, asig_k_arr
 
+    def calculate_evolved_observables_all_k(self, tf = 100.0, kspace = False):
+        """Evolves self.initial_state() from time ti = 0.0 to time tf in time steps self.dt. Calculates 
+           diagonal elements of populations for each time step in either real or k space.
+        
+        Inputs:  tf [float] - integration time in seconds
+                 kspace [bool] - if True, calculate observables in k space. If False, calculate in real space
+                 Note that sigsig_arr always returned in k space
+        Outputs: t_fs, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr [arrays of floats]: arrays of 
+                 integration times, photon, molecular, bright, dark, lower and upper polariton populations and 
+                 coherences <sigma_k(+) sigma_k(-)> respectively for each time step of the evolution"""
+        
+        state = self.initial_state() # build initial state
+        t_fs, y_vals = self.full_integration(tf, state, ti = 0.0)
+        y_vals = y_vals.flatten()
+        n_k_arr, n_M_arr, n_L_arr, n_U_arr, n_B_arr, n_D_arr, sigsig_arr, asig_k_arr = self.calculate_diagonal_elements(state, kspace) # calculate observables for initial state
+        for i in range(len(t_fs)):
+            state = y_vals[np.arange(i,i+self.state_length*len(t_fs), len(t_fs))]
+            n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag = self.calculate_diagonal_elements(state, kspace) # calculate observables for evolved state 
+            n_k_arr = np.append(n_k_arr, n_k_diag)
+            n_M_arr = np.append(n_M_arr, n_M_diag)
+            n_L_arr = np.append(n_L_arr, n_L_diag)
+            n_U_arr = np.append(n_U_arr, n_U_diag)
+            n_B_arr = np.append(n_B_arr, n_B_diag)
+            n_D_arr = np.append(n_D_arr, n_D_diag)
+            sigsig_arr = np.append(sigsig_arr, sigsig_diag)
+            asig_k_arr = np.append(asig_k_arr, asig_k_diag)
+        return t_fs, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr # sigsig_arr, asig_k_arr
+        
     def cavity_velocity(self, K):
         """Calculates cavity group velocity in units of micrometer/fs.
         
@@ -751,7 +768,7 @@ class HTC:
                  fixed_position_index [int] - index of the r/k array at which the evolution is evaluated
                  kspace [bool] - if True, plot in k space. If False, plot in real space"""
         
-        times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables(tf, fixed_position_index, kspace = kspace)
+        times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables_fixed_k(tf, fixed_position_index, kspace = kspace)
         fig, ax = plt.subplots(1,1,figsize = (6,4))
         ax.plot(times, n_B_arr, label = '$n_{B}$')
         ax.scatter(times, n_B_arr, marker = '.')
@@ -785,7 +802,7 @@ class HTC:
         step = 2*step*self.dt
         slices = np.arange(0.0, tf, step)
         #tf *= self.EV_TO_FS
-        times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables(tf, kspace = kspace)
+        times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables_all_k(tf, kspace = kspace)
         times *= self.EV_TO_FS # convert to femtoseconds for plotting
         slices *= self.EV_TO_FS # convert to femtoseconds for plotting
         fig = plt.figure(figsize=(10,6), layout = 'tight')
@@ -816,8 +833,12 @@ class HTC:
         offset = 0.1 * np.max(n_arr)
         r_of_nmax = np.array([])
         for i in range(len(slices)):
-            index = np.where(times == slices[i])
-            n_i = n_arr[i*self.Nk:(i+1)*self.Nk]
+            index = np.where(times == slices[i])[0]
+            if len(index) == 0:
+                continue
+            else:
+                index = index[0]
+            n_i = n_arr[index*self.Nk:(index+1)*self.Nk]
             r_of_nmax = np.append(r_of_nmax, self.Ks[np.where(n_i == np.max(n_i))])
             if threeD:
                 if kspace:
@@ -853,7 +874,7 @@ class HTC:
            Outputs: v_of_nmax [array of floats] - velocities of the peak at each integration time"""
         
         tf *= self.EV_TO_FS
-        times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables(tf, kspace = kspace)
+        times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables_all_k(tf, kspace = kspace)
         r_of_nmax = np.array([])
         for i in range(len(times)-1):
             n_i = n_L_arr[i*self.Nk:(i+1)*self.Nk]
@@ -874,7 +895,7 @@ class HTC:
 
     def plot_v_rms(self, savefig = False, tf = 100, kspace = False):
         tf *= self.EV_TO_FS
-        times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables(tf, kspace = kspace)
+        times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables_all_k(tf, kspace = kspace)
         r_of_nmax = np.array([])
         for i in range(len(times)-1):
             n_i = n_L_arr[i*self.Nk:(i+1)*self.Nk]
