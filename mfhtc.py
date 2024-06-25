@@ -784,8 +784,9 @@ class HTC:
         
         step = 2*step*self.dt
         slices = np.arange(0.0, tf, step)
-        tf *= self.EV_TO_FS
+        #tf *= self.EV_TO_FS
         times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables(tf, kspace = kspace)
+        times *= self.EV_TO_FS # convert to femtoseconds for plotting
         slices *= self.EV_TO_FS # convert to femtoseconds for plotting
         fig = plt.figure(figsize=(10,6), layout = 'tight')
         if threeD:
@@ -994,7 +995,7 @@ if __name__ == '__main__':
         'Q0': 30, # how many modes either side of K0 (or 0 for populations) to include; 2*Q0+1 modes total 
         'Nm': 6002, # Number of molecules
         'Nnu': 1, # Number of vibrational levels for each molecules
-        'L':  10.0, # Crystal propagation length, inverse micro meters
+        'L': 10.0, # Crystal propagation length, inverse micro meters
         'nr': 1.0, # refractive index, sets effective speed of light c/nr
         'omega_c': 1.94, # omega_0 = 1.94eV (Fig S4C)
         'epsilon': 2.14, # exciton energy, detuning omega_0-epsilon (0.2eV for model I in Xu et al. 2023)
@@ -1003,20 +1004,19 @@ if __name__ == '__main__':
         'Gam_z': 0.0, # molecular pure dephasing
         'Gam_up': 0.0, # molecular pumping
         'Gam_down': 0.0, #1e-7, # molecular loss
-        'S': 0.0, #7.11, # Huang-Rhys parameter
-        'omega_nu': 0.00647, # vibrational energy spacing
+        'S': 0.0, # Huang-Rhys parameter
+        'omega_nu': 0.0, #0647, # vibrational energy spacing
         'T': 0.0, #26, # k_B T in eV (.0259=300K, .026=302K)
-        'gam_nu': 0.01, # vibrational damping rate
+        'gam_nu': 0.0, #0.01, # vibrational damping rate
         'initial_state': 'incoherent', # or incoherent
-        'A': 0.01, # amplitude of initial wavepacket
-        'k_0': 6.0, # central wavenumber of initial wavepacket
+        'A': 0.2, # amplitude of initial wavepacket
+        'k_0': 5.0, # central wavenumber of initial wavepacket
         'sig_0': 4.0, # s.d. of initial wavepacket
-        #'sig_f':0, # s.d. in microns instead (if specified)
-        'atol':1e-9, # solver tolerance
-        'rtol':1e-6, # solver tolerance
-        'dt': 0.5, # determines interval at which solution is evaluated. Does not effect the accuracy of solution, only the grid at which observables are recorded
-        'exciton': False, # if True, initial state is pure exciton; if False, a lower polariton initial state is created        
-       }
+        'atol': 1e-9, # solver tolerance
+        'rtol': 1e-6, # solver tolerance
+        'dt': 500, # determines interval at which solution is evaluated. Does not effect the accuracy of solution, only the grid at which observables are recorded
+        'exciton': False, # if True, initial state is pure exciton; if False, a lower polariton initial state is created
+        }
     
     #julia_comparison('data/julia/gn0.45N1e5Z1.csv') # Gam_z = 0.01 # Julia comparison 2024-06-20
     htc = HTC(params)
