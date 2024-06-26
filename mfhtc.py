@@ -596,8 +596,8 @@ class HTC:
         if not kspace:
             nkft1 = ifft(n_k, axis=0, norm = 'ortho') # double fourier transform
             n_k = fft(nkft1, axis=-1, norm = 'ortho')
-            nlft1 = ifft(n_L, axis=-1, norm = 'ortho') # double fourier transform
-            n_L = fft(nlft1, axis=0, norm = 'ortho')
+            nlft1 = ifft(n_L, axis=0, norm = 'ortho') # double fourier transform
+            n_L = fft(nlft1, axis=-1, norm = 'ortho')
             nuft1 = ifft(n_U, axis=0, norm = 'ortho') # double fourier transform
             n_U = fft(nuft1, axis=-1, norm = 'ortho')
         else:
@@ -775,6 +775,7 @@ class HTC:
                  kspace [bool] - if True, plot in k space. If False, plot in real space"""
         
         times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables_fixed_k(tf, fixed_position_index, kspace = kspace)
+        times *= self.EV_TO_FS # convert to femtoseconds for plotting
         fig, ax = plt.subplots(1,1,figsize = (6,4))
         ax.plot(times, n_B_arr, label = '$n_{B}$')
         ax.scatter(times, n_B_arr, marker = '.')
@@ -782,7 +783,7 @@ class HTC:
         ax.scatter(times, n_k_arr, marker = '.')
         ax.plot(times, n_D_arr, label = '$n_{D}$')
         ax.scatter(times, n_D_arr, marker = '.')
-        ax.set_xlabel('time')
+        ax.set_xlabel('time [$fs$]')
         ax.set_ylabel(f'n(k={self.Ks[fixed_position_index]})')
         ax.legend()
         ax.set_title('Photonic and Excitonic Population Evolution over Time')
@@ -868,7 +869,7 @@ class HTC:
             ax.legend()
         if savefig:
             plt.savefig(fname = 'plot_waterfall.jpg', format = 'jpg')
-        return r_of_nmax
+        return r_of_nmax   
     
     def plot_initial_populations(self, savefig = False, kspace = False):
         """Plots upper, lower polariton and photonic populations on one figure in either k space or real space. 
@@ -1066,7 +1067,16 @@ class HTC:
             plt.savefig(fname = 'plot_waterfall_n_L.jpg', format = 'jpg')
         return r_of_nmax        
 
-    def plot_n_L_peak_velocity(self, savefig = False, tf = 100):
+    def butter_lowpass_filter(self, data, cutoff, fs, order=5, axis=-1):
+        data = np.array(data)
+        b, a = butter(order, cutoff, fs=fs, btype='low')
+        padlen = 3 * max(len(a), len(b)) # default filtfilt padlength
+        if padlen >= data.shape[-1] - 1:#but must be less than data.shape[-1]-1
+            # https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.filtfilt.html#scipy.signal.filtfilt
+            padlen = max(0, data.shape[-1]-2) 
+        return filtfilt(b, a, data, axis=axis, padlen=padlen)
+    
+    def plot_n_L_peak_velocity(self, savefig = False, tf = 100, filtering = False):
         """Plots displacement and velocity of peak of lower polariton population.
         
         Inputs:  savefig [bool] - if True, saves plots as 'state_i.jpg' and 'velocity_of_peak.jpg' 
@@ -1077,58 +1087,49 @@ class HTC:
         
         times, n_arr= self.calculate_evolved_n_L_all_k(tf, kspace = False)
         times *= self.EV_TO_FS # rescale for plotting
-        r_of_nmax = np.array([])        
-        #v_of_nmax = np.array([])
-        #dts = np.array([])
-        #n_0 = n_arr[0:self.Nk]
-        #r_of_nmax = np.append(r_of_nmax, self.Ks[np.where(n_0 == np.max(n_0))])
-        #plotting_t = np.array([0.0])
-        #k = 0
-        for i in range(len(times)):
+        n_0 = n_arr[0:self.Nk]
+        wm_val = np.average((self.params['delta_r']*self.Ks)**2, weights=n_0) # position of weighted mean (i.e ~ position of peak)
+        wm_arr = np.array([wm_val])
+        rwm_arr = np.array([np.sqrt(wm_arr[0])]) # root of position of weighted mean
+        mean_vals = np.ones_like(n_0)*wm_val
+        msd_val = np.mean(n_0 - mean_vals)   # mean square deviation of the n_L distribution
+        msd_arr = np.array([msd_val])
+        for i in range(1, len(times)):
             n_i = n_arr[i*self.Nk:(i+1)*self.Nk]
-            r_of_nmax = np.append(r_of_nmax, self.Ks[np.where(n_i == np.max(n_i))])
-            #if r_of_nmax[-1] != self.Ks[np.where(n_i == np.max(n_i))]: # filter out times where there is no displacement due to the very short time step
-            #    r_of_nmax = np.append(r_of_nmax, self.Ks[np.where(n_i == np.max(n_i))])
-            #    plotting_t = np.append(plotting_t, times[i])
-                #if k > 1 and k > len(r_of_nmax): # symmetric difference gradient
-                #    dr = (r_of_nmax[k+1] - r_of_nmax[k-1])*self.params['delta_r']
-                #    dt = plotting_t[k+1] - plotting_t[k-1]
-                #else:
-                #    dr = (r_of_nmax[-1] - r_of_nmax[-2])*self.params['delta_r']
-                #    dt = plotting_t[-1] - plotting_t[-2]
-                #v = dr / dt
-                #dts = np.append(dts, dt)
-                #v_of_nmax = np.append(v_of_nmax, v)
-                #k = k+1
+            #if filtering: 
+            #    n_i = self.butter_lowpass_filter(n_i, 0.1, fs)
+            wm_val = np.average((self.params['delta_r']*self.Ks)**2, weights=n_i) # weighted mean
+            wm_arr = np.append(wm_arr, wm_val)
+            rwm_arr = np.append(rwm_arr, np.sqrt(wm_val))    
+            mean_vals = np.ones_like(n_i)*wm_val
+            msd_val = np.mean(n_i - mean_vals)
+            msd_arr = np.append(msd_arr, msd_val)
+        fig, ax = plt.subplots(2,1,figsize = (12,10), layout = 'tight')
+        ax[0].plot(times, wm_arr) #msd_arr)
+        ax[0].set_xlabel('time [$fs$]')
+        ax[0].set_ylabel('position of weighted mean [$\mu m$]')
+        ax[1].plot(times, msd_arr)
+        ax[1].set_xlabel('time [$fs$]')
+        ax[1].set_ylabel('rmsd [$\mu m$]')
+        fig.suptitle('MSD and RMSD of Lower Polariton Distribution')
+        
         dt = times[1] - times[0]
-        r_of_nmax *= self.params['delta_r']
-        v_of_nmax = np.gradient(r_of_nmax, dt)
-        v_of_nmax = np.abs(v_of_nmax)
-        plotting_v = v_of_nmax[v_of_nmax != 0.0]
-        plotting_t = times[np.where(v_of_nmax != 0)[0]]
-        #plotting_r = r_of_nmax[np.where(v_of_nmax != 0)[0]]  
-        #fig, ax = plt.subplots(2,1,figsize = (12,10))
-        #ax[0].scatter(plotting_t, plotting_r, marker = '.')
-        #ax[0].scatter(times, r_of_nmax, marker = '.')
-        #ax[0].set_xlabel('time [$fs$]')
-        #ax[0].set_ylabel('x [$\mu m$]')
-        #ax[1].scatter(plotting_t, plotting_v, marker = '.')
-        #print(plotting_v)
-        #ax[1].plot(plotting_t, plotting_v, marker = 'x', linestyle = 'dashed')
-        #ax[1].set_xlabel('time [$fs$]')
-        #ax[1].set_ylabel('speed [$\mu m fs^{-1}$]')
-        fig, ax = plt.subplots(1,1,figsize = (6,4), layout = 'tight')
-        # setting the offset on y axis
-        #ax = plt.gca()
-        ax.scatter(plotting_t, plotting_v, marker = '.') #, linestyle = 'dashed'
-        ax.ticklabel_format(axis = 'y', useOffset=False)
-        ax.yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
-        ax.set_xlabel('time [$fs$]')
-        ax.set_ylabel('speed [$\mu m fs^{-1}$]')
-        fig.suptitle('Displacement and speed of the Peak of the Wavepacket')
+        v_of_wm = np.gradient(wm_arr, dt)
+        v_of_msd = np.gradient(msd_arr, dt)
+
+        fig1, ax1 = plt.subplots(2,1,figsize = (12,10), layout = 'tight')
+        ax1[0].plot(times, v_of_wm, marker = '.', linestyle = 'dashed')
+        ax1[0].set_xlabel('time [$fs$]')
+        ax1[0].set_ylabel('$v_{\mu}$ [$\mu m$ $fs^{-1}$]')
+        ax1[1].plot(times, v_of_msd, marker = '.', linestyle = 'dashed')
+        ax1[1].set_xlabel('time [$fs$]')
+        ax1[1].set_ylabel('$v_{msd}$ [$\mu m$ $fs^{-1}$]')
+        #ax1[1].ticklabel_format(axis = 'y', useOffset=False)
+        #ax1[1].yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
+        fig1.suptitle('Velocity of MSD and RMSD position of Lower Polariton Distrubution')
         if savefig:
-            plt.savefig(fname = 'velocity_of_peak.jpg', format = 'jpg')
-        return r_of_nmax, plotting_v
+            plt.savefig(fname = 'v_rmsd.jpg', format = 'jpg')
+        #return r_of_nmax, plotting_v
 
     def plot_n_L_rms_velocity(self, savefig = False, tf = 100, kspace = False):
         times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables_all_k(tf, kspace = kspace)
@@ -1151,27 +1152,26 @@ if __name__ == '__main__':
     params = {
         'Q0': 30, # how many modes either side of K0 (or 0 for populations) to include; 2*Q0+1 modes total 
         'Nm': 6002, # Number of molecules
-        'Nnu': 1, # Number of vibrational levels for each molecules
-        'L': 10.0, # Crystal propagation length, inverse micro meters
+        'Nnu': 2, # Number of vibrational levels for each molecules
+        'L': 60.0, # Crystal propagation length, inverse micro meters
         'nr': 1.0, # refractive index, sets effective speed of light c/nr
-        'omega_c': 1.94, # omega_0 = 1.94eV (Fig S4C)
-        'epsilon': 2.44, #214.1, # exciton energy, detuning omega_0-epsilon (0.2eV for model I in Xu et al. 2023)
+        'omega_c': 1.94, #1.94, # omega_0 = 1.94eV (Fig S4C)
+        'epsilon': 2.44, # exciton energy, detuning omega_0-epsilon (0.2eV for model I in Xu et al. 2023)
         'gSqrtN': 0.15, # light-matter coupling
-        'kappa_c': 0.0, #3e-3, # photon loss
+        'kappa_c': 3e-3, # photon loss
         'Gam_z': 0.0, # molecular pure dephasing
         'Gam_up': 0.0, # molecular pumping
-        'Gam_down': 0.0, #1e-7, # molecular loss
-        'S': 0.0, # Huang-Rhys parameter
-        'omega_nu': 0.0, #0647, # vibrational energy spacing
+        'Gam_down': 1e-7, # molecular loss
+        'S': 10.0, #10.0, #1.11, # Huang-Rhys parameter
+        'omega_nu': 0.0647, # vibrational energy spacing
         'T': 0.0, #26, # k_B T in eV (.0259=300K, .026=302K)
-        'gam_nu': 0.0, #0.01, # vibrational damping rate
-        #'initial_state': 'incoherent', # or incoherent
+        'gam_nu': 0.01, # vibrational damping rate
         'A': 0.08, # amplitude of initial wavepacket
         'k_0': 5.0, # central wavenumber of initial wavepacket
         'sig_0': 4.0, # s.d. of initial wavepacket
-        'atol': 1e-10, # solver tolerance
-        'rtol': 1e-10, # solver tolerance
-        'dt': 0.5, # determines interval at which solution is evaluated. Does not effect the accuracy of solution, only the grid at which observables are recorded
+        'atol': 1e-7, # solver tolerance
+        'rtol': 1e-7, # solver tolerance
+        'dt': 1, #0.5, # determines interval at which solution is evaluated. Does not effect the accuracy of solution, only the grid at which observables are recorded
         'exciton': False, # if True, initial state is pure exciton; if False, a lower polariton initial state is created
         }
     
