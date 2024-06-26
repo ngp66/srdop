@@ -26,6 +26,7 @@ except ModuleNotFoundError:
     # colored traceback not supported
     pass
 from decimal import Decimal
+from matplotlib.ticker import FormatStrFormatter
 
 logger = logging.getLogger(__name__)
 
@@ -553,7 +554,7 @@ class HTC:
         n_U = np.zeros((self.Nk, self.Nk), dtype=complex) # initialise array for upper polariton population values
         delta_k = np.eye(self.Nk) # equivalent to 2*Nnu*zeta(i+)zeta(j+)delta(i+,j+)
         for p, k in itertools.product(range(self.Nk), range(self.Nk)): 
-            sigsig[p,k] = sigsig_k1[k,p] - sigsig_k2[k-p] + post_l0[k-p] + 0.5 * delta_k[k,p]
+            sigsig[p,k] = sigsig_k1[p,k] - sigsig_k2[k-p] + post_l0[k-p] + 0.5 * delta_k[p,k]
             n_U[p,k] = self.coeffs['X_k'][p] * self.coeffs['X_k'][k] * sigsig[p,k] \
             + self.coeffs['Y_k'][p] * self.coeffs['Y_k'][k] * n_k[p,k] \
             + self.coeffs['X_k'][p] * self.coeffs['Y_k'][k] * asig_k[k,p] \
@@ -595,8 +596,8 @@ class HTC:
         if not kspace:
             nkft1 = ifft(n_k, axis=0, norm = 'ortho') # double fourier transform
             n_k = fft(nkft1, axis=-1, norm = 'ortho')
-            nlft1 = ifft(n_L, axis=0, norm = 'ortho') # double fourier transform
-            n_L = fft(nlft1, axis=-1, norm = 'ortho')
+            nlft1 = ifft(n_L, axis=-1, norm = 'ortho') # double fourier transform
+            n_L = fft(nlft1, axis=0, norm = 'ortho')
             nuft1 = ifft(n_U, axis=0, norm = 'ortho') # double fourier transform
             n_U = fft(nuft1, axis=-1, norm = 'ortho')
         else:
@@ -606,7 +607,7 @@ class HTC:
             n_B = ifft(nbft1, axis=1, norm = 'ortho')
         n_D = n_M - n_B
         return n_k, n_M, n_L, n_U, sigsig, asig_k, n_B, n_D
-
+        
     def calculate_diagonal_elements(self, state, kspace):
         """Calculates diagonal elements of the coherence, polariton, photon and molecular population
            arrays for a given state and asserts that relevant elements have real values. 
@@ -640,7 +641,7 @@ class HTC:
         sigsig_diag = fftshift(np.diag(sigsig).real) # shift back so that k=0 component is at the center
         asig_k_diag = fftshift(np.diag(asig_k).real) # shift back so that k=0 component is at the center
         return n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag
-
+        
     def calculate_evolved_observables_fixed_k(self, tf = 100.0, fixed_position_index = 1, kspace = False):
         """Evolves self.initial_state() from time ti = 0.0 to time tf in time steps self.dt. Calculates 
            diagonal elements of populations for each time step in either real or k space and returns values for FIXED_POSITION_INDEX only.
@@ -851,17 +852,16 @@ class HTC:
                     ax.set_ylabel('t')
                 else:
                     ax.plot(self.Ks*self.params['delta_r'], n_i, label = f"t = {slices[i]:.2E}", zdir = 'y', zs=slices[i], zorder = (len(slices)-i), color=colors[i])
-                    r_of_nmax *= self.params['delta_r']
             else:
                 if kspace:
                     ax.plot(self.Ks, n_i + i * offset, label = f't = {slices[i]:.2E}', color=colors[i])
                 else:
                     ax.plot(self.Ks*self.params['delta_r'], n_i + i * offset, label = f't = {slices[i]:.2E}', zorder = (len(slices)-i), color=colors[i])
-                    r_of_nmax *= self.params['delta_r']
         if kspace:
             ax.set_xlabel('$k [\mu m^{-1}]$')
         else:
             ax.set_xlabel('$r_n [\mu m]$')
+            r_of_nmax *= self.params['delta_r']
         ax.set_title('Time Snapshots of Wavepacket Evolution')
         #ax.set_xlim([3.5, 6])
         if legend:
@@ -869,47 +869,6 @@ class HTC:
         if savefig:
             plt.savefig(fname = 'plot_waterfall.jpg', format = 'jpg')
         return r_of_nmax
-
-    def plot_peak_velocities(self, savefig = False, tf = 100, kspace = False):
-        """Plots displacement and velocity of peak of lower polariton population.
-        
-           Inputs:  savefig [bool] - if True, saves plots as 'state_i.jpg' and 'velocity_of_peak.jpg' 
-                    tf [float] - integration time in seconds (conversion to femtoseconds performed internally)
-                    kspace [bool] - if True, time snapshots plotted over the array of K-values self.Ks. If False, plot in real space
-           Outputs: v_of_nmax [array of floats] - velocities of the peak at each integration time"""
-        
-        tf *= self.EV_TO_FS
-        times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables_all_k(tf, kspace = kspace)
-        r_of_nmax = np.array([])
-        for i in range(len(times)-1):
-            n_i = n_L_arr[i*self.Nk:(i+1)*self.Nk]
-            r_of_nmax = np.append(r_of_nmax, self.Ks[np.where(n_i == np.max(n_i))])
-        dt = times[1] - times[0]
-        v_of_nmax = np.gradient(r_of_nmax, dt)
-        fig, ax = plt.subplots(2,1,figsize = (12,10), sharex = True)
-        ax[0].plot(times[:(len(times)-1)], r_of_nmax)
-        ax[0].set_xlabel('time [$fs$]')
-        ax[0].set_ylabel('x [$\mu m$]')
-        ax[1].plot(times[:(len(times)-1)], v_of_nmax)
-        ax[1].set_xlabel('time [$fs$]')
-        ax[1].set_ylabel('velocity [$\mu m fs^{-1}$]')
-        fig.suptitle('Displacement and Velocity of the Peak of the Wavepacket')
-        if savefig:
-            plt.savefig(fname = 'velocity_of_peak.jpg', format = 'jpg')
-        return v_of_nmax
-
-    def plot_v_rms(self, savefig = False, tf = 100, kspace = False):
-        tf *= self.EV_TO_FS
-        times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables_all_k(tf, kspace = kspace)
-        r_of_nmax = np.array([])
-        for i in range(len(times)-1):
-            n_i = n_L_arr[i*self.Nk:(i+1)*self.Nk]
-            r_of_nmax = np.append(r_of_nmax, self.Ks[np.where(n_i == np.max(n_i))])
-        dt = times[1] - times[0]
-        v_of_nmax = np.gradient(r_of_nmax, dt)
-        fig, ax = plt.subplots(2,1,figsize = (12,10), sharex = True)
-        
-        return v_rms
     
     def plot_initial_populations(self, savefig = False, kspace = False):
         """Plots upper, lower polariton and photonic populations on one figure in either k space or real space. 
@@ -1011,6 +970,178 @@ class HTC:
         ax.legend()
         fig.savefig('figures/julia_comparison.png', dpi=350, bbox_inches='tight')
 
+    ###################################### Lighter functions for calculating working only with n_L populations ##############################################
+    def calculate_n_L(self, state, kspace = True):
+        """Calculates only lower polariton population for a given state. Use instead of calculate_observables() 
+        for faster code execution when only n_L is required.
+        
+        Inputs:  state [array of floats] - array (a, lp, l) of length self.state_length. To get the correct 
+                 flattening and dimensions, pass state to self.split_reshape_return()
+                 kspace [bool] - if True, calculate n_L in kspace. If False, calculate in real space
+        Outputs: n_L [array of floats] - lower polariton population in either real or k space""" 
+        
+        a, lp, l0 = self.split_reshape_return(state) 
+        n_k, n_L, n_U, sigsig, asig_k = self.calculate_upper_lower_polariton(a, lp, l0) # k-space, initial populations (not evolved)
+        if not kspace:
+            nlft1 = ifft(n_L, axis=-1, norm = 'ortho') # double fourier transform
+            return fft(nlft1, axis=0, norm = 'ortho')
+        return n_L
+        
+    def calculate_diagonal_n_L(self, state, kspace):
+        """Calculates diagonal elements of lower polariton population array for a given state STATE 
+        and asserts that relevant elements have real values. Use instead of calculate_diagonal_elements() 
+        for faster code execution when only n_L is required.
+        
+        Inputs:  state [array of floats] - array (a, lp, l) of length self.state_length. To get the correct 
+                 flattening and dimensions, pass state to self.split_reshape_return()
+                 kspace [bool] - if True, calculate observables in kspace. If False, calculate in real space
+                 Note that sigsig_diag, asig_k_diag always in k space
+        Outputs: n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag [arrays of floats] - 
+                 arrays of diagonal values of photon, molecular, lower polariton, upper polariton, bright, dark populations, 
+                 coherences <sigma_k(+) sigma_k(-)> and <a_k sigma_k(+)> respectively"""
+        
+        n_L = self.calculate_n_L(state, kspace)
+        assert np.allclose(np.diag(n_L).imag, 0.0), "Lower polariton population has imaginary components"
+        n_L_diag = fftshift(np.diag(n_L).real) # shift back so that k=0 component is at the center
+        return n_L_diag
+        
+    def calculate_evolved_n_L_all_k(self, tf = 100.0, kspace = False):
+        """Evolves self.initial_state() from time ti = 0.0 to time tf in time steps self.dt. Calculates 
+           diagonal elements of populations for each time step in either real or k space.
+        
+        Inputs:  tf [float] - integration time in seconds
+                 kspace [bool] - if True, calculate observables in k space. If False, calculate in real space
+                 Note that sigsig_arr always returned in k space
+        Outputs: t_fs, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr [arrays of floats]: arrays of 
+                 integration times, photon, molecular, bright, dark, lower and upper polariton populations and 
+                 coherences <sigma_k(+) sigma_k(-)> respectively for each time step of the evolution"""
+        
+        state = self.initial_state() # build initial state
+        t_fs, y_vals = self.full_integration(tf, state, ti = 0.0)
+        y_vals = y_vals.T
+        n_L_arr = self.calculate_diagonal_n_L(state, kspace) # calculate observables for initial state
+        for i in range(1,len(t_fs)):
+            state = y_vals[i] 
+            n_L_diag = self.calculate_diagonal_n_L(state, kspace) # calculate observables for evolved state 
+            n_L_arr = np.append(n_L_arr, n_L_diag)
+        assert len(n_L_arr) == self.Nk*len(t_fs), 'Length of evolved lower polariton population array does not have the required dimensions'
+        return t_fs, n_L_arr
+
+    def plot_waterfall_n_L(self, savefig = False, tf = 101.1, legend = False, step = 100):
+        """Plots selected time snapshots of the evolution of the lower polariton population as a waterfall plot in real space.
+
+        Inputs:  savefig [bool] - if True, saves plot as 'plot_waterfall.jpg'
+                 tf [float] - final time for the evolution of the wavepacket in seconds (transformation to femtoseconds performed internally by code)
+                 legend [bool] - if True, include legend with times of the time snapshots
+                 step [float] - time step that defines array of snapshot times. Although full evolution is calculated, only snapshots at times separated
+                 by 2*step*self.dt are plotted
+        Outputs: r_of_nmax [array of floats] - locations of the peak at each snapshot time"""
+        
+        slices = np.arange(0.0, tf, step)
+        times, n_arr = self.calculate_evolved_n_L_all_k(tf, kspace = False)
+        times *= self.EV_TO_FS # convert to femtoseconds for plotting
+        slices *= self.EV_TO_FS # convert to femtoseconds for plotting
+        fig = plt.figure(figsize=(10,6), layout = 'tight')
+        ax = fig.add_subplot()
+        colors = plt.cm.coolwarm(np.linspace(0,1,len(slices)))
+        assert isinstance(n_arr, np.ndarray), "Please, specify one of n_L, n_B and n_k"
+        offset = 0.1 * np.max(n_arr)
+        r_of_nmax = np.array([])
+        for i in range(len(slices)):
+            index = np.where(times == slices[i])[0]
+            if len(index) == 0:
+                continue
+            else:
+                index = index[0]
+            n_i = n_arr[index*self.Nk:(index+1)*self.Nk]
+            r_of_nmax = np.append(r_of_nmax, self.Ks[np.where(n_i == np.max(n_i))])
+            ax.plot(self.Ks*self.params['delta_r'], n_i + i * offset, label = f't = {slices[i]:.2E}', zorder = (len(slices)-i), color=colors[i])
+        r_of_nmax *= self.params['delta_r']
+        ax.set_xlabel('$r_n [\mu m]$')
+        ax.set_ylabel('$n_{L}(r_n)$')
+        ax.set_title('Time Snapshots of Wavepacket Evolution')
+        if legend:
+            ax.legend()
+        if savefig:
+            plt.savefig(fname = 'plot_waterfall_n_L.jpg', format = 'jpg')
+        return r_of_nmax        
+
+    def plot_n_L_peak_velocity(self, savefig = False, tf = 100):
+        """Plots displacement and velocity of peak of lower polariton population.
+        
+        Inputs:  savefig [bool] - if True, saves plots as 'state_i.jpg' and 'velocity_of_peak.jpg' 
+                 tf [float] - integration time in seconds (conversion to femtoseconds performed internally)
+                 kspace [bool] - if True, time snapshots plotted over the array of K-values self.Ks. If False, plot in real space
+        Outputs: r_of_nmax [array of floats] - locations of the peak at each integration time
+                 v_of_nmax [array of floats] - velocities of the peak at each integration time"""
+        
+        times, n_arr= self.calculate_evolved_n_L_all_k(tf, kspace = False)
+        times *= self.EV_TO_FS # rescale for plotting
+        r_of_nmax = np.array([])        
+        #v_of_nmax = np.array([])
+        #dts = np.array([])
+        #n_0 = n_arr[0:self.Nk]
+        #r_of_nmax = np.append(r_of_nmax, self.Ks[np.where(n_0 == np.max(n_0))])
+        #plotting_t = np.array([0.0])
+        #k = 0
+        for i in range(len(times)):
+            n_i = n_arr[i*self.Nk:(i+1)*self.Nk]
+            r_of_nmax = np.append(r_of_nmax, self.Ks[np.where(n_i == np.max(n_i))])
+            #if r_of_nmax[-1] != self.Ks[np.where(n_i == np.max(n_i))]: # filter out times where there is no displacement due to the very short time step
+            #    r_of_nmax = np.append(r_of_nmax, self.Ks[np.where(n_i == np.max(n_i))])
+            #    plotting_t = np.append(plotting_t, times[i])
+                #if k > 1 and k > len(r_of_nmax): # symmetric difference gradient
+                #    dr = (r_of_nmax[k+1] - r_of_nmax[k-1])*self.params['delta_r']
+                #    dt = plotting_t[k+1] - plotting_t[k-1]
+                #else:
+                #    dr = (r_of_nmax[-1] - r_of_nmax[-2])*self.params['delta_r']
+                #    dt = plotting_t[-1] - plotting_t[-2]
+                #v = dr / dt
+                #dts = np.append(dts, dt)
+                #v_of_nmax = np.append(v_of_nmax, v)
+                #k = k+1
+        dt = times[1] - times[0]
+        r_of_nmax *= self.params['delta_r']
+        v_of_nmax = np.gradient(r_of_nmax, dt)
+        v_of_nmax = np.abs(v_of_nmax)
+        plotting_v = v_of_nmax[v_of_nmax != 0.0]
+        plotting_t = times[np.where(v_of_nmax != 0)[0]]
+        #plotting_r = r_of_nmax[np.where(v_of_nmax != 0)[0]]  
+        #fig, ax = plt.subplots(2,1,figsize = (12,10))
+        #ax[0].scatter(plotting_t, plotting_r, marker = '.')
+        #ax[0].scatter(times, r_of_nmax, marker = '.')
+        #ax[0].set_xlabel('time [$fs$]')
+        #ax[0].set_ylabel('x [$\mu m$]')
+        #ax[1].scatter(plotting_t, plotting_v, marker = '.')
+        #print(plotting_v)
+        #ax[1].plot(plotting_t, plotting_v, marker = 'x', linestyle = 'dashed')
+        #ax[1].set_xlabel('time [$fs$]')
+        #ax[1].set_ylabel('speed [$\mu m fs^{-1}$]')
+        fig, ax = plt.subplots(1,1,figsize = (6,4), layout = 'tight')
+        # setting the offset on y axis
+        #ax = plt.gca()
+        ax.scatter(plotting_t, plotting_v, marker = '.') #, linestyle = 'dashed'
+        ax.ticklabel_format(axis = 'y', useOffset=False)
+        ax.yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
+        ax.set_xlabel('time [$fs$]')
+        ax.set_ylabel('speed [$\mu m fs^{-1}$]')
+        fig.suptitle('Displacement and speed of the Peak of the Wavepacket')
+        if savefig:
+            plt.savefig(fname = 'velocity_of_peak.jpg', format = 'jpg')
+        return r_of_nmax, plotting_v
+
+    def plot_n_L_rms_velocity(self, savefig = False, tf = 100, kspace = False):
+        times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables_all_k(tf, kspace = kspace)
+        times *= self.EV_TO_FS # rescale for plotting
+        r_of_nmax = np.array([])
+        for i in range(len(times)-1):
+            n_i = n_L_arr[i*self.Nk:(i+1)*self.Nk]
+            r_of_nmax = np.append(r_of_nmax, self.Ks[np.where(n_i == np.max(n_i))])
+        dt = times[1] - times[0]
+        v_of_nmax = np.gradient(r_of_nmax, dt)
+        fig, ax = plt.subplots(2,1,figsize = (12,10), sharex = True)
+        
+        return v_rms
             
 if __name__ == '__main__':
     logging.basicConfig(
@@ -1040,7 +1171,7 @@ if __name__ == '__main__':
         'sig_0': 4.0, # s.d. of initial wavepacket
         'atol': 1e-10, # solver tolerance
         'rtol': 1e-10, # solver tolerance
-        'dt': 0.05, # determines interval at which solution is evaluated. Does not effect the accuracy of solution, only the grid at which observables are recorded
+        'dt': 0.5, # determines interval at which solution is evaluated. Does not effect the accuracy of solution, only the grid at which observables are recorded
         'exciton': False, # if True, initial state is pure exciton; if False, a lower polariton initial state is created
         }
     
