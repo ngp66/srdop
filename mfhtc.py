@@ -603,8 +603,8 @@ class HTC:
         else:
             #nmft1 = fft(n_M, axis=0) # double fourier transform
             n_M = sigsig
-            nbft1 = fft(n_B, axis=0, norm = 'ortho') # double fourier transform
-            n_B = ifft(nbft1, axis=1, norm = 'ortho')
+            nbft1 = ifft(n_B, axis=0, norm = 'ortho') # double fourier transform
+            n_B = fft(nbft1, axis=1, norm = 'ortho')
         n_D = n_M - n_B
         return n_k, n_M, n_L, n_U, sigsig, asig_k, n_B, n_D
         
@@ -864,7 +864,11 @@ class HTC:
             ax.set_xlabel('$r_n [\mu m]$')
             r_of_nmax *= self.params['delta_r']
         ax.set_title('Time Snapshots of Wavepacket Evolution')
-        #ax.set_xlim([3.5, 6])
+        ax.minorticks_on()
+        ax.tick_params(axis="both", direction="in", which="both", right=True, top=True, labelsize=13)
+        for axis in ['top','bottom','left','right']:
+            ax.spines[axis].set_linewidth(1.3)
+        ax.grid(alpha = 0.2)   
         if legend:
             ax.legend()
         if savefig:
@@ -1061,6 +1065,11 @@ class HTC:
         ax.set_xlabel('$r_n [\mu m]$')
         ax.set_ylabel('$n_{L}(r_n)$')
         ax.set_title('Time Snapshots of Wavepacket Evolution')
+        ax.minorticks_on()
+        ax.tick_params(axis="both", direction="in", which="both", right=True, top=True, labelsize=13)
+        for axis in ['top','bottom','left','right']:
+            ax.spines[axis].set_linewidth(1.3)
+        ax.grid(alpha = 0.2)        
         if legend:
             ax.legend()
         if savefig:
@@ -1088,45 +1097,50 @@ class HTC:
         times, n_arr= self.calculate_evolved_n_L_all_k(tf, kspace = False)
         times *= self.EV_TO_FS # rescale for plotting
         n_0 = n_arr[0:self.Nk]
-        wm_val = np.average((self.params['delta_r']*self.Ks)**2, weights=n_0) # position of weighted mean (i.e ~ position of peak)
-        wm_arr = np.array([wm_val])
-        rwm_arr = np.array([np.sqrt(wm_arr[0])]) # root of position of weighted mean
-        mean_vals = np.ones_like(n_0)*wm_val
-        msd_val = np.mean(n_0 - mean_vals)   # mean square deviation of the n_L distribution
+        msd_val = np.average((self.params['delta_r']*self.Ks)**2, weights=n_0) # position of weighted mean (i.e ~ position of peak)
         msd_arr = np.array([msd_val])
+        rmsd_arr = np.array([np.sqrt(msd_val)]) # root of position of weighted mean
         for i in range(1, len(times)):
             n_i = n_arr[i*self.Nk:(i+1)*self.Nk]
             #if filtering: 
             #    n_i = self.butter_lowpass_filter(n_i, 0.1, fs)
-            wm_val = np.average((self.params['delta_r']*self.Ks)**2, weights=n_i) # weighted mean
-            wm_arr = np.append(wm_arr, wm_val)
-            rwm_arr = np.append(rwm_arr, np.sqrt(wm_val))    
-            mean_vals = np.ones_like(n_i)*wm_val
-            msd_val = np.mean(n_i - mean_vals)
+            msd_val = np.average((self.params['delta_r']*self.Ks)**2, weights=n_i) # weighted mean
             msd_arr = np.append(msd_arr, msd_val)
-        fig, ax = plt.subplots(2,1,figsize = (12,10), layout = 'tight')
-        ax[0].plot(times, wm_arr) #msd_arr)
-        ax[0].set_xlabel('time [$fs$]')
-        ax[0].set_ylabel('position of weighted mean [$\mu m$]')
-        ax[1].plot(times, msd_arr)
-        ax[1].set_xlabel('time [$fs$]')
-        ax[1].set_ylabel('rmsd [$\mu m$]')
-        fig.suptitle('MSD and RMSD of Lower Polariton Distribution')
+            rmsd_arr = np.append(rmsd_arr, np.sqrt(msd_val))    
+            
+        fig, ax = plt.subplots(2,2,figsize = (12,10), layout = 'tight')
+        ax[0][0].plot(times, msd_arr) #msd_arr)
+        ax[0][0].set_xlabel('time [$fs$]', fontsize=14)
+        ax[0][0].set_ylabel('msd [$\mu m$]', fontsize=14)
+        ax[0][1].plot(times, rmsd_arr)
+        ax[0][1].set_xlabel('time [$fs$]', fontsize=14)
+        ax[0][1].set_ylabel('rmsd [$\mu m$]', fontsize=14)
+        #fig.suptitle('MSD and RMSD of Lower Polariton Distribution')
         
         dt = times[1] - times[0]
-        v_of_wm = np.gradient(wm_arr, dt)
         v_of_msd = np.gradient(msd_arr, dt)
+        v_of_rmsd = np.gradient(rmsd_arr, dt)
 
-        fig1, ax1 = plt.subplots(2,1,figsize = (12,10), layout = 'tight')
-        ax1[0].plot(times, v_of_wm, marker = '.', linestyle = 'dashed')
-        ax1[0].set_xlabel('time [$fs$]')
-        ax1[0].set_ylabel('$v_{\mu}$ [$\mu m$ $fs^{-1}$]')
-        ax1[1].plot(times, v_of_msd, marker = '.', linestyle = 'dashed')
-        ax1[1].set_xlabel('time [$fs$]')
-        ax1[1].set_ylabel('$v_{msd}$ [$\mu m$ $fs^{-1}$]')
-        #ax1[1].ticklabel_format(axis = 'y', useOffset=False)
-        #ax1[1].yaxis.set_major_formatter(FormatStrFormatter('%.2f'))
-        fig1.suptitle('Velocity of MSD and RMSD position of Lower Polariton Distrubution')
+        ax[1][0].plot(times, v_of_msd)
+        ax[1][0].set_xlabel('time [$fs$]', fontsize=14)
+        ax[1][0].set_ylabel('$v_{msd}$ [$\mu m$ $fs^{-1}$]', fontsize=14)
+        
+        ax[1][1].plot(times, v_of_rmsd)
+        ax[1][1].set_xlabel('time [$fs$]', fontsize=14)
+        ax[1][1].set_ylabel('$v_{rmsd}$ [$\mu m$ $fs^{-1}$]', fontsize=14)
+        
+        for i in range(2):
+            ax[0][i].minorticks_on()
+            ax[1][i].minorticks_on()
+            ax[0][i].tick_params(axis="both", direction="in", which="both", right=True, top=True, labelsize=13)
+            ax[1][i].tick_params(axis="both", direction="in", which="both", right=True, top=True, labelsize=13)
+            for axis in ['top','bottom','left','right']:
+                ax[0][i].spines[axis].set_linewidth(1.3)
+                ax[1][i].spines[axis].set_linewidth(1.3) 
+            ax[0][i].grid(alpha = 0.2)
+            ax[1][i].grid(alpha = 0.2)
+            
+        fig.suptitle('Position and Velocity of MSD and RMSD of Lower Polariton Distrubution', fontsize=16)
         if savefig:
             plt.savefig(fname = 'v_rmsd.jpg', format = 'jpg')
         #return r_of_nmax, plotting_v
@@ -1152,8 +1166,8 @@ if __name__ == '__main__':
     params = {
         'Q0': 30, # how many modes either side of K0 (or 0 for populations) to include; 2*Q0+1 modes total 
         'Nm': 6002, # Number of molecules
-        'Nnu': 2, # Number of vibrational levels for each molecules
-        'L': 60.0, # Crystal propagation length, inverse micro meters
+        'Nnu': 3, # Number of vibrational levels for each molecules
+        'L': 40.0, # Crystal propagation length, micro meters
         'nr': 1.0, # refractive index, sets effective speed of light c/nr
         'omega_c': 1.94, #1.94, # omega_0 = 1.94eV (Fig S4C)
         'epsilon': 2.44, # exciton energy, detuning omega_0-epsilon (0.2eV for model I in Xu et al. 2023)
@@ -1162,16 +1176,16 @@ if __name__ == '__main__':
         'Gam_z': 0.0, # molecular pure dephasing
         'Gam_up': 0.0, # molecular pumping
         'Gam_down': 1e-7, # molecular loss
-        'S': 10.0, #10.0, #1.11, # Huang-Rhys parameter
+        'S': 1.0, #10.0, #1.11, # Huang-Rhys parameter
         'omega_nu': 0.0647, # vibrational energy spacing
-        'T': 0.0, #26, # k_B T in eV (.0259=300K, .026=302K)
+        'T': 0.026, # k_B T in eV (.0259=300K, .026=302K)
         'gam_nu': 0.01, # vibrational damping rate
-        'A': 0.08, # amplitude of initial wavepacket
+        'A': 0.1, # amplitude of initial wavepacket
         'k_0': 5.0, # central wavenumber of initial wavepacket
         'sig_0': 4.0, # s.d. of initial wavepacket
         'atol': 1e-7, # solver tolerance
         'rtol': 1e-7, # solver tolerance
-        'dt': 1, #0.5, # determines interval at which solution is evaluated. Does not effect the accuracy of solution, only the grid at which observables are recorded
+        'dt': 0.5, # determines interval at which solution is evaluated. Does not effect the accuracy of solution, only the grid at which observables are recorded
         'exciton': False, # if True, initial state is pure exciton; if False, a lower polariton initial state is created
         }
     
