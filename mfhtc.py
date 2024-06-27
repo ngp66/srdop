@@ -352,6 +352,8 @@ class HTC:
             l00.append(2*coeffs00)
         a0 /= np.sqrt(self.Nm) # rescale initial state (a -> a-tilda)
         # flatten and concatenate to match input state structure of RK (1d array)
+        lp0 = np.array(lp0).T # put n index last for einstein summation
+        l00 = np.array(l00).T
         state = np.concatenate((a0, lp0, l00), axis=None)
         assert len(state) == self.state_length, 'Initial state does not match the required dimensions'
         return state
@@ -594,17 +596,17 @@ class HTC:
         n_B = self.calculate_n_bright_real(l0, lp) # bright state population (real space)
         n_k, n_L, n_U, sigsig, asig_k = self.calculate_upper_lower_polariton(a, lp, l0) # k-space, initial populations (not evolved)
         if not kspace:
-            nkft1 = ifft(n_k, axis=0, norm = 'ortho') # double fourier transform
-            n_k = fft(nkft1, axis=-1, norm = 'ortho')
-            nlft1 = ifft(n_L, axis=0, norm = 'ortho') # double fourier transform
-            n_L = fft(nlft1, axis=-1, norm = 'ortho')
-            nuft1 = ifft(n_U, axis=0, norm = 'ortho') # double fourier transform
-            n_U = fft(nuft1, axis=-1, norm = 'ortho')
+            nkft1 = fft(n_k, axis=0, norm = 'ortho') # double fourier transform
+            n_k = ifft(nkft1, axis=-1, norm = 'ortho')
+            nlft1 = fft(n_L, axis=0, norm = 'ortho') # double fourier transform
+            n_L = ifft(nlft1, axis=-1, norm = 'ortho')
+            nuft1 = fft(n_U, axis=0, norm = 'ortho') # double fourier transform
+            n_U = ifft(nuft1, axis=-1, norm = 'ortho')
         else:
             #nmft1 = fft(n_M, axis=0) # double fourier transform
             n_M = sigsig
-            nbft1 = ifft(n_B, axis=0, norm = 'ortho') # double fourier transform
-            n_B = fft(nbft1, axis=1, norm = 'ortho')
+            nbft1 = fft(n_B, axis=0, norm = 'ortho') # double fourier transform
+            n_B = ifft(nbft1, axis=1, norm = 'ortho')
         n_D = n_M - n_B
         return n_k, n_M, n_L, n_U, sigsig, asig_k, n_B, n_D
         
@@ -1097,53 +1099,34 @@ class HTC:
         times, n_arr= self.calculate_evolved_n_L_all_k(tf, kspace = False)
         times *= self.EV_TO_FS # rescale for plotting
         n_0 = n_arr[0:self.Nk]
-        msd_val = np.average((self.params['delta_r']*self.Ks)**2, weights=n_0) # position of weighted mean (i.e ~ position of peak)
+        msd_val = np.average(self.params['delta_r']*self.Ks, weights=n_0) # position of weighted mean (i.e ~ position of peak)
         msd_arr = np.array([msd_val])
-        rmsd_arr = np.array([np.sqrt(msd_val)]) # root of position of weighted mean
         for i in range(1, len(times)):
             n_i = n_arr[i*self.Nk:(i+1)*self.Nk]
-            #if filtering: 
-            #    n_i = self.butter_lowpass_filter(n_i, 0.1, fs)
-            msd_val = np.average((self.params['delta_r']*self.Ks)**2, weights=n_i) # weighted mean
+            msd_val = np.average(self.params['delta_r']*self.Ks, weights=n_i) # weighted mean
             msd_arr = np.append(msd_arr, msd_val)
-            rmsd_arr = np.append(rmsd_arr, np.sqrt(msd_val))    
             
-        fig, ax = plt.subplots(2,2,figsize = (12,10), layout = 'tight')
-        ax[0][0].plot(times, msd_arr) #msd_arr)
-        ax[0][0].set_xlabel('time [$fs$]', fontsize=14)
-        ax[0][0].set_ylabel('msd [$\mu m$]', fontsize=14)
-        ax[0][1].plot(times, rmsd_arr)
-        ax[0][1].set_xlabel('time [$fs$]', fontsize=14)
-        ax[0][1].set_ylabel('rmsd [$\mu m$]', fontsize=14)
-        #fig.suptitle('MSD and RMSD of Lower Polariton Distribution')
-        
         dt = times[1] - times[0]
         v_of_msd = np.gradient(msd_arr, dt)
-        v_of_rmsd = np.gradient(rmsd_arr, dt)
+        
+        fig, ax = plt.subplots(1,2,figsize = (9,4), layout = 'tight')
+        ax[0].plot(times, msd_arr) #msd_arr)
+        ax[0].set_xlabel('time [$fs$]', fontsize=14)
+        ax[0].set_ylabel('md [$\mu m$]', fontsize=14)
+        ax[1].plot(times, v_of_msd)
+        ax[1].set_xlabel('time [$fs$]', fontsize=14)
+        ax[1].set_ylabel('$v_{md}$ [$\mu m$ $fs^{-1}$]', fontsize=14)
 
-        ax[1][0].plot(times, v_of_msd)
-        ax[1][0].set_xlabel('time [$fs$]', fontsize=14)
-        ax[1][0].set_ylabel('$v_{msd}$ [$\mu m$ $fs^{-1}$]', fontsize=14)
-        
-        ax[1][1].plot(times, v_of_rmsd)
-        ax[1][1].set_xlabel('time [$fs$]', fontsize=14)
-        ax[1][1].set_ylabel('$v_{rmsd}$ [$\mu m$ $fs^{-1}$]', fontsize=14)
-        
         for i in range(2):
-            ax[0][i].minorticks_on()
-            ax[1][i].minorticks_on()
-            ax[0][i].tick_params(axis="both", direction="in", which="both", right=True, top=True, labelsize=13)
-            ax[1][i].tick_params(axis="both", direction="in", which="both", right=True, top=True, labelsize=13)
+            ax[i].minorticks_on()
+            ax[i].tick_params(axis="both", direction="in", which="both", right=True, top=True, labelsize=13)
             for axis in ['top','bottom','left','right']:
-                ax[0][i].spines[axis].set_linewidth(1.3)
-                ax[1][i].spines[axis].set_linewidth(1.3) 
-            ax[0][i].grid(alpha = 0.2)
-            ax[1][i].grid(alpha = 0.2)
+                ax[i].spines[axis].set_linewidth(1.3)
+            ax[i].grid(alpha = 0.2)
             
-        fig.suptitle('Position and Velocity of MSD and RMSD of Lower Polariton Distrubution', fontsize=16)
+        fig.suptitle('Position and Velocity of MD of Lower Polariton Distrubution', fontsize=16)
         if savefig:
             plt.savefig(fname = 'v_rmsd.jpg', format = 'jpg')
-        #return r_of_nmax, plotting_v
 
     def plot_n_L_rms_velocity(self, savefig = False, tf = 100, kspace = False):
         times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables_all_k(tf, kspace = kspace)
