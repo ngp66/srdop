@@ -47,31 +47,31 @@ class HTC:
     DEFAULT_DIRS = {'data':'./data', 'figures':'./figures'} # output directories
     # N.B. type of parameters used to parse (non-default) input parameters
     DEFAULT_PARAMS = {
-            'Q0': 15, # how many modes either side of K0 (or 0 for populations) to include; 2*Q0+1 modes total 
+            'Q0': 120, # how many modes either side of K0 (or 0 for populations) to include; 2*Q0+1 modes total 
             'Nm': 6001, # Number of molecules
             'Nnu': 1, # Number of vibrational levels for each molecules
             'L': 60.0, # Crystal propagation length, inverse micro meters
-            'nr':1.0, # refractive index, sets effective speed of light c/nr
-            'omega_c':1.94, # omega_0 = 1.94eV (Fig S4C)
-            'epsilon':2.14, # exciton energy, detuning omega_0-epsilon (0.2eV for model I in Xu et al. 2023)
-            'gSqrtN':0.15, # light-matter coupling
-            'kappa_c':3e-3, # photon loss
-            'Gam_z':0.0, # molecular pure dephasing
-            'Gam_up':0.0, # molecular pumping
-            'Gam_down':1e-7, # molecular loss
-            'S':0.0, # Huang-Rhys parameter
-            'omega_nu':0.00647, # vibrational energy spacing
-            'T':0.026, # k_B T in eV (.0259=300K, .026=302K)
-            'gam_nu':0.01, # vibrational damping rate
+            'nr': 1.0, # refractive index, sets effective speed of light c/nr
+            'omega_c': 1.94, # omega_0 = 1.94eV (Fig S4C)
+            'epsilon': 2.14, # exciton energy, detuning omega_0-epsilon (0.2eV for model I in Xu et al. 2023)
+            'gSqrtN': 0.15, # light-matter coupling
+            'kappa_c': 3e-3, # photon loss
+            'Gam_z': 0.0, # molecular pure dephasing
+            'Gam_up': 0.0, # molecular pumping
+            'Gam_down': 1e-7, # molecular loss
+            'S': 0.0, # Huang-Rhys parameter
+            'omega_nu': 0.00647, # vibrational energy spacing
+            'T': 0.026, # k_B T in eV (.0259=300K, .026=302K)
+            'gam_nu': 0.015, # vibrational damping rate
             'initial_state': 'photonic', # or incoherent
-            'A': 0.8, # amplitude of initial wavepacket
-            'k_0': 3.0, # central wavenumber of initial wavepacket
+            'A': 0.1, # amplitude of initial wavepacket
+            'K_0': 50.0, # central wavenumber of initial wavepacket
             'sig_0': 4.0, # s.d. of initial wavepacket
             #'sig_f':0, # s.d. in microns instead (if specified)
             'atol':1e-9, # solver tolerance
             'rtol':1e-6, # solver tolerance
             'dt': 0.5, # determines interval at which solution is evaluated. Does not effect the accuracy of solution, only the grid at which observables are recorded
-            'exciton': True, # if True, initial state is pure exciton; if False, a lower polariton initial state is created
+            'exciton': False, # if True, initial state is pure exciton; if False, a lower polariton initial state is created
             #'lowpass': 0.01, # used for smoothing oscillations in observable plots
             }
 
@@ -334,7 +334,7 @@ class HTC:
         
         rho0_vib = self.thermal_rho_vib(self.params['T']) # molecular vibrational density matrix
         shifted_Ks = np.fft.ifftshift(self.Ks) 
-        alpha_k = self.params['A']*np.exp(-(shifted_Ks-self.params['k_0'])**2 / (2*self.params['sig_0']**2)) # create gaussian profile at k values
+        alpha_k = self.params['A']*np.exp(-(shifted_Ks-self.params['K_0'])**2 / (2*self.params['sig_0']**2)) # create gaussian profile at k values
         # build density matrices
         TLS_matrix = np.array([[0.0,0.0],[0.0,1.0]]) # initially in ground state
         a0, lp0, l00 = [], [], [] 
@@ -1096,7 +1096,7 @@ class HTC:
         Outputs: r_of_nmax [array of floats] - locations of the peak at each integration time
                  v_of_nmax [array of floats] - velocities of the peak at each integration time"""
 
-        k_index = np.where(self.Ks == self.params['k_0'])
+        k_index = np.where(self.Ks == self.params['K_0'])
         p_weight = (fftshift(self.coeffs['X_k'])[k_index])**2
         e_weight = (fftshift(self.coeffs['Y_k'])[k_index])**2
         
@@ -1186,7 +1186,7 @@ if __name__ == '__main__':
         'T': 0.026, # k_B T in eV (.0259=300K, .026=302K)
         'gam_nu': 0.01, # vibrational damping rate
         'A': 0.1, # amplitude of initial wavepacket
-        'k_0': 50.0, # central wavenumber of initial wavepacket
+        'K_0': 50.0, # central wavenumber of initial wavepacket
         'sig_0': 4.0, # s.d. of initial wavepacket
         'atol': 1e-7, # solver tolerance
         'rtol': 1e-7, # solver tolerance
