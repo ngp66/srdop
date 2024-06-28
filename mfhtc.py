@@ -1087,7 +1087,7 @@ class HTC:
             padlen = max(0, data.shape[-1]-2) 
         return filtfilt(b, a, data, axis=axis, padlen=padlen)
     
-    def plot_n_L_peak_velocity(self, savefig = False, tf = 100, filtering = False):
+    def plot_n_L_peak_velocity(self, savefig = False, tf = 100, npgradient = False):
         """Plots displacement and velocity of peak of lower polariton population.
         
         Inputs:  savefig [bool] - if True, saves plots as 'state_i.jpg' and 'velocity_of_peak.jpg' 
@@ -1105,15 +1105,35 @@ class HTC:
             n_i = n_arr[i*self.Nk:(i+1)*self.Nk]
             msd_val = np.average(self.params['delta_r']*self.Ks, weights=n_i) # weighted mean
             msd_arr = np.append(msd_arr, msd_val)
-            
-        dt = times[1] - times[0]
-        v_of_msd = np.gradient(msd_arr, dt)
+        
+        def f(t, D, po):
+            return D * t**po + msd_arr[0]
+
+        def v(t, D, po):
+            return D * po * t**(po-1)
+                    
+        popt, pcov = curve_fit(f, times, msd_arr, bounds=([0,1],[np.inf, np.inf]))
+        fit_data = f(times, popt[0], popt[1])
+        fit_v_of_msd = v(times, popt[0], popt[1])
         
         fig, ax = plt.subplots(1,2,figsize = (9,4), layout = 'tight')
-        ax[0].plot(times, msd_arr) #msd_arr)
+        ax[0].plot(times, msd_arr, label = 'data') 
+        ax[0].plot(times, fit_data, label = 'fit', ls = '--') 
         ax[0].set_xlabel('time [$fs$]', fontsize=14)
         ax[0].set_ylabel('md [$\mu m$]', fontsize=14)
-        ax[1].plot(times, v_of_msd)
+        
+        if npgradient:
+            dt = times[1] - times[0]
+            v_of_msd = np.gradient(msd_arr, dt)
+            ax[1].plot(times, v_of_msd, label = 'np.gradient')
+            ax[1].plot(times[1:], fit_v_of_msd[1:], label = 'curve_fit', ls = '--')
+        else:
+            if np.round(popt[1],2) == 1.0:  # set y tick spacing manually when v = const.; automatic setting makes units hard to read
+                ax[1].set_yticks(np.arange(0.5*fit_v_of_msd[1], 1.5*fit_v_of_msd[1], 0.2*fit_v_of_msd[1]))
+                ax[1].ticklabel_format(axis = 'y', useOffset=False)
+                ax[1].yaxis.set_major_formatter(FormatStrFormatter('%.3f'))
+                ax[1].plot(times[1:], fit_v_of_msd[1:], label = 'curve_fit') # start at second entry to avoid v set to 0 at t = 0.0      
+                
         ax[1].set_xlabel('time [$fs$]', fontsize=14)
         ax[1].set_ylabel('$v_{md}$ [$\mu m$ $fs^{-1}$]', fontsize=14)
 
@@ -1123,23 +1143,11 @@ class HTC:
             for axis in ['top','bottom','left','right']:
                 ax[i].spines[axis].set_linewidth(1.3)
             ax[i].grid(alpha = 0.2)
-            
+            ax[i].legend()    
+
         fig.suptitle('Position and Velocity of MD of Lower Polariton Distrubution', fontsize=16)
         if savefig:
             plt.savefig(fname = 'v_rmsd.jpg', format = 'jpg')
-
-    def plot_n_L_rms_velocity(self, savefig = False, tf = 100, kspace = False):
-        times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables_all_k(tf, kspace = kspace)
-        times *= self.EV_TO_FS # rescale for plotting
-        r_of_nmax = np.array([])
-        for i in range(len(times)-1):
-            n_i = n_L_arr[i*self.Nk:(i+1)*self.Nk]
-            r_of_nmax = np.append(r_of_nmax, self.Ks[np.where(n_i == np.max(n_i))])
-        dt = times[1] - times[0]
-        v_of_nmax = np.gradient(r_of_nmax, dt)
-        fig, ax = plt.subplots(2,1,figsize = (12,10), sharex = True)
-        
-        return v_rms
             
 if __name__ == '__main__':
     logging.basicConfig(
