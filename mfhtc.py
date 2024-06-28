@@ -327,14 +327,14 @@ class HTC:
         ps = [np.exp(-n * self.params['omega_nu'] / T) for n in range(self.Nnu)]
         return (1/Z) * np.diag(ps)
         
-    def initial_state(self):
+    def initial_state(self, K0):
         """Returns initial state as a Gaussian wavepacket on the lower polariton branch.
         
            Outputs: state [array of floats] - flattened 1D array [<a_k>, <lambda_n^i+>, <lambda_n^i0>] that defines the initial state"""
         
         rho0_vib = self.thermal_rho_vib(self.params['T']) # molecular vibrational density matrix
         shifted_Ks = np.fft.ifftshift(self.Ks) 
-        alpha_k = self.params['A']*np.exp(-(shifted_Ks-self.params['K_0'])**2 / (2*self.params['sig_0']**2)) # create gaussian profile at k values
+        alpha_k = self.params['A']*np.exp(-(shifted_Ks-K0)**2 / (2*self.params['sig_0']**2)) # create gaussian profile at k values
         # build density matrices
         TLS_matrix = np.array([[0.0,0.0],[0.0,1.0]]) # initially in ground state
         a0, lp0, l00 = [], [], [] 
@@ -730,7 +730,7 @@ class HTC:
         v_c = (1e6 * 1e-15) * self.c * self.K_factor * K / np.sqrt(1 + self.K_factor**2 * K**2) # in micrometer / fs (self.c in m/s; * self.K_factor * K in eV)
         return v_c
         
-    def group_velocity_expected(self):
+    def group_velocity_expected(self, Ks_auto = True, all_Ks = None):
         """Calculates theoretical group velocity as gradient of lower/upper polariton population
            in units of micrometer/fs.
         
@@ -738,7 +738,8 @@ class HTC:
                  velocities at each K value in units micrometer/fs"""
         
         exciton = self.params['exciton']
-        all_Ks = np.linspace(-1.5*np.abs(self.Ks[0]), 1.5*np.abs(self.Ks[-1]), 250)        
+        if Ks_auto == True:
+            all_Ks = np.linspace(-1.5*np.abs(self.Ks[0]), 1.5*np.abs(self.Ks[-1]), 250)        
         v_c = self.cavity_velocity(all_Ks) # in micrometer / fs
         omega_k = self.omega(all_Ks, exciton) #self.consts['omega']
         epsilon = self.params['epsilon']
@@ -1012,7 +1013,7 @@ class HTC:
         n_L_diag = fftshift(np.diag(n_L).real) # shift back so that k=0 component is at the center
         return n_L_diag
         
-    def calculate_evolved_n_L_all_k(self, tf = 100.0, kspace = False):
+    def calculate_evolved_n_L_all_k(self, tf = 100.0, kspace = False, K0 = 50.0):
         """Evolves self.initial_state() from time ti = 0.0 to time tf in time steps self.dt. Calculates 
            diagonal elements of populations for each time step in either real or k space.
         
@@ -1023,7 +1024,7 @@ class HTC:
                  integration times, photon, molecular, bright, dark, lower and upper polariton populations and 
                  coherences <sigma_k(+) sigma_k(-)> respectively for each time step of the evolution"""
         
-        state = self.initial_state() # build initial state
+        state = self.initial_state(K0) # build initial state
         t_fs, y_vals = self.full_integration(tf, state, ti = 0.0)
         y_vals = y_vals.T
         n_L_arr = self.calculate_diagonal_n_L(state, kspace) # calculate observables for initial state
@@ -1034,7 +1035,7 @@ class HTC:
         assert len(n_L_arr) == self.Nk*len(t_fs), 'Length of evolved lower polariton population array does not have the required dimensions'
         return t_fs, n_L_arr
 
-    def plot_waterfall_n_L(self, savefig = False, tf = 101.1, legend = False, step = 100):
+    def plot_waterfall_n_L(self, savefig = False, tf = 101.1, legend = False, step = 100, K0 = 50.0):
         """Plots selected time snapshots of the evolution of the lower polariton population as a waterfall plot in real space.
 
         Inputs:  savefig [bool] - if True, saves plot as 'plot_waterfall.jpg'
@@ -1045,7 +1046,7 @@ class HTC:
         Outputs: r_of_nmax [array of floats] - locations of the peak at each snapshot time"""
         
         slices = np.arange(0.0, tf, step)
-        times, n_arr = self.calculate_evolved_n_L_all_k(tf, kspace = False)
+        times, n_arr = self.calculate_evolved_n_L_all_k(tf, kspace = False, K0 = K0)
         times *= self.EV_TO_FS # convert to femtoseconds for plotting
         slices *= self.EV_TO_FS # convert to femtoseconds for plotting
         fig = plt.figure(figsize=(10,6), layout = 'tight')
@@ -1087,7 +1088,7 @@ class HTC:
             padlen = max(0, data.shape[-1]-2) 
         return filtfilt(b, a, data, axis=axis, padlen=padlen)
     
-    def plot_n_L_peak_velocity(self, savefig = False, tf = 100, npgradient = True, plot_hopfield = False):
+    def plot_n_L_peak_velocity(self, savefig = False, filename = 'v_rmsd.jpg', tf = 100, npgradient = True, plot_hopfield = False, K0 = 50.0):
         """Plots displacement and velocity of peak of lower polariton population.
         
         Inputs:  savefig [bool] - if True, saves plots as 'state_i.jpg' and 'velocity_of_peak.jpg' 
@@ -1096,7 +1097,7 @@ class HTC:
         Outputs: r_of_nmax [array of floats] - locations of the peak at each integration time
                  v_of_nmax [array of floats] - velocities of the peak at each integration time"""
 
-        k_index = np.where(self.Ks == self.params['K_0'])
+        k_index = np.where(self.Ks == K0) #self.params['K_0'])
         p_weight = (fftshift(self.coeffs['X_k'])[k_index])**2
         e_weight = (fftshift(self.coeffs['Y_k'])[k_index])**2
         
@@ -1110,7 +1111,7 @@ class HTC:
             ax1.set_xlabel('k [$\mu m$]')
             ax1.legend()
             
-        times, n_arr= self.calculate_evolved_n_L_all_k(tf, kspace = False)
+        times, n_arr= self.calculate_evolved_n_L_all_k(tf, kspace = False, K0 = K0)
         times *= self.EV_TO_FS # rescale for plotting
         n_0 = n_arr[0:self.Nk]
         msd_val = np.average(self.params['delta_r']*self.Ks, weights=n_0) # position of weighted mean (i.e ~ position of peak)
@@ -1161,8 +1162,34 @@ class HTC:
 
         fig.suptitle('Position and Velocity of MD of Lower Polariton Distrubution', fontsize=16)
         if savefig:
-            plt.savefig(fname = 'v_rmsd.jpg', format = 'jpg')
-            
+            plt.savefig(fname = filename, format = 'jpg')
+
+        return p_weight, e_weight, fit_v_of_msd[30]
+
+    def plot_v_wrt_k(self, K0s, tf = 100.0):
+        #K0s = np.arange(30, 80, 10)
+        p_weights = np.array([])
+        e_weights = np.array([])
+        vvals = np.array([])
+        for i in K0s:
+            p_weight, e_weight, vval = self.plot_n_L_peak_velocity(savefig = True, filename = f'v_at_k0_{i}.jpg', tf = tf, npgradient = False, K0 = i) 
+            p_weights = np.append(p_weights, p_weight)
+            e_weights = np.append(e_weights, e_weight)
+            vvals = np.append(vvals, vval)
+        v_c, v_L, v_U = self.group_velocity_expected(Ks_auto = False, all_Ks = K0s)
+        fig, ax = plt.subplots(1,1,figsize = (2,2))
+        ax.scatter(p_weights, vvals, marker = '.', label = 'observed')
+        ax.scatter(p_weights, v_L, marker = '.', label = 'theoretical')
+        ax.set_xlabel('$X_k^2$')
+        ax.set_ylabel('$v_{obs}$')
+        ax.minorticks_on()
+        ax.tick_params(axis="both", direction="in", which="both", right=True, top=True, labelsize=13)
+        for axis in ['top','bottom','left','right']:
+            ax.spines[axis].set_linewidth(1.3)
+        ax.grid(alpha = 0.2)
+        ax.legend()
+        return p_weights, e_weights, vvals
+
 if __name__ == '__main__':
     logging.basicConfig(
         format='%(filename)s L%(lineno)s %(asctime)s %(levelname)s: %(message)s',
@@ -1200,4 +1227,6 @@ if __name__ == '__main__':
     #htc.calculate_evolved_observables(tf = 2.1, fixed_position_index = 5)
     #htc.plot_evolution(tf = 100.1, savefig = True, fixed_position_index = 16, kspace = False)
     #htc.plot_initial_populations(kspace = False)
-    htc.plot_waterfall(n_L = True, tf = 100, step = 10, kspace = False, legend = True)
+    #htc.plot_waterfall(n_L = True, tf = 100, step = 10, kspace = False, legend = True)
+    K0s = np.arange(10, 100, 10)
+    htc.plot_v_wrt_k(K0s, tf = 100.0)
