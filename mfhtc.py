@@ -753,7 +753,7 @@ class HTC:
 
         Inputs:  savefig [bool] - if True, saves plot as 'dispersion.jpg'"""
         
-        all_Ks = np.linspace(-1.5*np.abs(self.Ks[0]), 1.5*np.abs(self.Ks[-1]), 250)        
+        all_Ks = np.linspace(-1.5*np.abs(self.ks[0]), 1.5*np.abs(self.ks[-1]), 250)        
         vc, vgL, vgU = self.group_velocity_expected()
         fig, ax = plt.subplots(1,1,figsize = (6,4), layout = 'tight')
         #ax.scatter(all_Ks, vgL, marker = '.')
@@ -1087,7 +1087,7 @@ class HTC:
             padlen = max(0, data.shape[-1]-2) 
         return filtfilt(b, a, data, axis=axis, padlen=padlen)
     
-    def plot_n_L_peak_velocity(self, savefig = False, tf = 100, npgradient = False):
+    def plot_n_L_peak_velocity(self, savefig = False, tf = 100, npgradient = True, plot_hopfield = False):
         """Plots displacement and velocity of peak of lower polariton population.
         
         Inputs:  savefig [bool] - if True, saves plots as 'state_i.jpg' and 'velocity_of_peak.jpg' 
@@ -1095,7 +1095,21 @@ class HTC:
                  kspace [bool] - if True, time snapshots plotted over the array of K-values self.Ks. If False, plot in real space
         Outputs: r_of_nmax [array of floats] - locations of the peak at each integration time
                  v_of_nmax [array of floats] - velocities of the peak at each integration time"""
+
+        k_index = np.where(self.Ks == self.params['k_0'])
+        p_weight = (fftshift(self.coeffs['X_k'])[k_index])**2
+        e_weight = (fftshift(self.coeffs['Y_k'])[k_index])**2
         
+        print('Photonic weight, X_k^2 =', p_weight, 'Molecular weight, Y_k^2 =', e_weight)
+
+        if plot_hopfield:
+            fig1, ax1 = plt.subplots(1,1,figsize = (2,2))
+            ax1.plot(self.ks, fftshift(self.coeffs['X_k']), label = 'X_k')
+            ax1.plot(self.ks, fftshift(self.coeffs['Y_k']), label = 'Y_k')
+            ax1.set_title('Hopfield coefficients')
+            ax1.set_xlabel('k [$\mu m$]')
+            ax1.legend()
+            
         times, n_arr= self.calculate_evolved_n_L_all_k(tf, kspace = False)
         times *= self.EV_TO_FS # rescale for plotting
         n_0 = n_arr[0:self.Nk]
@@ -1155,7 +1169,7 @@ if __name__ == '__main__':
         level=logging.INFO,
         datefmt='%H:%M')
     params = {
-        'Q0': 30, # how many modes either side of K0 (or 0 for populations) to include; 2*Q0+1 modes total 
+        'Q0': 150, # how many modes either side of K0 (or 0 for populations) to include; 2*Q0+1 modes total 
         'Nm': 6002, # Number of molecules
         'Nnu': 3, # Number of vibrational levels for each molecules
         'L': 40.0, # Crystal propagation length, micro meters
@@ -1167,12 +1181,12 @@ if __name__ == '__main__':
         'Gam_z': 0.0, # molecular pure dephasing
         'Gam_up': 0.0, # molecular pumping
         'Gam_down': 1e-7, # molecular loss
-        'S': 1.0, #10.0, #1.11, # Huang-Rhys parameter
+        'S': 0.0, #10.0, #1.11, # Huang-Rhys parameter
         'omega_nu': 0.0647, # vibrational energy spacing
         'T': 0.026, # k_B T in eV (.0259=300K, .026=302K)
         'gam_nu': 0.01, # vibrational damping rate
         'A': 0.1, # amplitude of initial wavepacket
-        'k_0': 5.0, # central wavenumber of initial wavepacket
+        'k_0': 50.0, # central wavenumber of initial wavepacket
         'sig_0': 4.0, # s.d. of initial wavepacket
         'atol': 1e-7, # solver tolerance
         'rtol': 1e-7, # solver tolerance
