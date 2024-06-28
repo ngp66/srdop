@@ -1127,7 +1127,7 @@ class HTC:
         def v(t, D, po):
             return D * po * t**(po-1)
                     
-        popt, pcov = curve_fit(f, times, msd_arr, bounds=([0,1],[np.inf, np.inf]))
+        popt, pcov = curve_fit(f, times, msd_arr, bounds=([0,np.inf])) # [0,1], [np.inf, np.inf]
         fit_data = f(times, popt[0], popt[1])
         fit_v_of_msd = v(times, popt[0], popt[1])
         
@@ -1141,7 +1141,8 @@ class HTC:
             dt = times[1] - times[0]
             v_of_msd = np.gradient(msd_arr, dt)
             ax[1].plot(times, v_of_msd, label = 'np.gradient')
-            ax[1].plot(times[1:], fit_v_of_msd[1:], label = 'curve_fit', ls = '--')
+            ax[1].plot(times[1:], fit_v_of_msd[1:], label = 'curve_fit', ls = '--') #fit_v_of_msd[1:]
+            avg_v = np.mean(v_of_msd)
         else:
             if np.round(popt[1],2) == 1.0:  # set y tick spacing manually when v = const.; automatic setting makes units hard to read
                 ax[1].set_yticks(np.arange(0.5*fit_v_of_msd[1], 1.5*fit_v_of_msd[1], 0.2*fit_v_of_msd[1]))
@@ -1164,31 +1165,54 @@ class HTC:
         if savefig:
             plt.savefig(fname = filename, format = 'jpg')
 
-        return p_weight, e_weight, fit_v_of_msd[30]
+        return p_weight, e_weight, avg_v, fit_v_of_msd[30]
 
-    def plot_v_wrt_k(self, K0s, tf = 100.0):
+    def plot_v_wrt_k(self, K0s, tf = 100.0, npgradient = False):
         #K0s = np.arange(30, 80, 10)
         p_weights = np.array([])
         e_weights = np.array([])
+        vvalsnp = np.array([])
         vvals = np.array([])
+
         for i in K0s:
-            p_weight, e_weight, vval = self.plot_n_L_peak_velocity(savefig = True, filename = f'v_at_k0_{i}.jpg', tf = tf, npgradient = False, K0 = i) 
+            p_weight, e_weight, vvalnp, vval = self.plot_n_L_peak_velocity(savefig = True, filename = f'v_at_k0_{i}_S_10.jpg', tf = tf, npgradient = npgradient, K0 = i) 
             p_weights = np.append(p_weights, p_weight)
             e_weights = np.append(e_weights, e_weight)
+            vvalsnp = np.append(vvals, vval)
             vvals = np.append(vvals, vval)
+
         v_c, v_L, v_U = self.group_velocity_expected(Ks_auto = False, all_Ks = K0s)
-        fig, ax = plt.subplots(1,1,figsize = (2,2))
-        ax.scatter(p_weights, vvals, marker = '.', label = 'observed')
-        ax.scatter(p_weights, v_L, marker = '.', label = 'theoretical')
+
+        fig, ax = plt.subplots(1,1,figsize = (6,4.5), layout = 'tight')
+        ax.plot(p_weights, 1000*v_L, marker = '.', label = 'expected', ls = '--', color = 'green')
+        ax.plot(p_weights, 1000*vvalsnp, marker = '.', label = 'observed', ls = '--', color = 'blue')
         ax.set_xlabel('$X_k^2$')
-        ax.set_ylabel('$v_{obs}$')
+        ax.set_ylabel('$v_{obs} [\mu m$ $ps^{-1}]$')
         ax.minorticks_on()
         ax.tick_params(axis="both", direction="in", which="both", right=True, top=True, labelsize=13)
         for axis in ['top','bottom','left','right']:
             ax.spines[axis].set_linewidth(1.3)
         ax.grid(alpha = 0.2)
         ax.legend()
-        return p_weights, e_weights, vvals
+        S = self.params['S']
+        ax.set_title(f'Polariton Group Velocities (S = {S})')
+        plt.savefig(fname = 'velocities_np_gradient.jpg', format = 'jpg')
+
+        fig1, ax1 = plt.subplots(1,1,figsize = (3,2))
+        ax1.plot(p_weights, 1000*v_L, marker = '.', label = 'expected', ls = '--')
+        ax1.scatter(p_weights, 1000*vvals, marker = '.', label = 'observed')
+        ax1.set_xlabel('$X_k^2$')
+        ax1.set_ylabel('$v_{obs} [\mu m$ $ps^{-1}]$')
+        ax1.minorticks_on()
+        ax1.tick_params(axis="both", direction="in", which="both", right=True, top=True, labelsize=13)
+        for axis in ['top','bottom','left','right']:
+            ax1.spines[axis].set_linewidth(1.3)
+        ax1.grid(alpha = 0.2)
+        ax1.legend()
+        ax1.set_title(f'Polariton Group Velocities (S = {S})')
+        plt.savefig(fname = 'velocities_curvefit.jpg', format = 'jpg')
+        
+        return p_weights, e_weights, vvals, vvalsnp
 
 if __name__ == '__main__':
     logging.basicConfig(
@@ -1228,5 +1252,3 @@ if __name__ == '__main__':
     #htc.plot_evolution(tf = 100.1, savefig = True, fixed_position_index = 16, kspace = False)
     #htc.plot_initial_populations(kspace = False)
     #htc.plot_waterfall(n_L = True, tf = 100, step = 10, kspace = False, legend = True)
-    K0s = np.arange(10, 100, 10)
-    htc.plot_v_wrt_k(K0s, tf = 100.0)
