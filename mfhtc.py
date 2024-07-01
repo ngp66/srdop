@@ -519,7 +519,7 @@ class HTC:
            Inputs:  l0 [array of floats] - values of the matrix lambda_0 at all wavectors self.Ks
                     lp [array of floats] - values of the matrix lambda_+ at all wavectors self.Ks
            Outputs: n_B_r [array of floats] - bright state populations at all positions in real space """
-        
+        #print(np.shape(l0), np.shape(lp))
         zlp = contract('i,in->n', self.consts['zetap'], lp) # zeta(i+)<lambda(i+)>
         zzlplp = np.outer(zlp, np.conj(zlp)) # zeta(i+)zeta(j+)<lambda(i+)><lambda(j-)>
         zzzl0 = contract('a,an->n', self.consts['zetazeta'], l0)
@@ -604,9 +604,10 @@ class HTC:
             n_U = ifft(nuft1, axis=-1, norm = 'ortho')
         else:
             #nmft1 = fft(n_M, axis=0) # double fourier transform
+            print('i am here')
             n_M = sigsig
-            nbft1 = fft(n_B, axis=0, norm = 'ortho') # double fourier transform
-            n_B = ifft(nbft1, axis=1, norm = 'ortho')
+            nbft1 = ifft(n_B, axis=-1, norm = 'ortho') # double fourier transform
+            n_B = fft(nbft1, axis=0, norm = 'ortho')
         n_D = n_M - n_B
         return n_k, n_M, n_L, n_U, sigsig, asig_k, n_B, n_D
         
@@ -687,7 +688,7 @@ class HTC:
         assert len(n_D_arr) == len(t_fs), 'Length of evolved dark exciton population array does not have the required dimensions'
         return t_fs, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr 
 
-    def calculate_evolved_observables_all_k(self, tf = 100.0, kspace = False):
+    def calculate_evolved_observables_all_k(self, tf = 100.0, kspace = False, K0 = 50.0):
         """Evolves self.initial_state() from time ti = 0.0 to time tf in time steps self.dt. Calculates 
            diagonal elements of populations for each time step in either real or k space.
         
@@ -698,27 +699,36 @@ class HTC:
                  integration times, photon, molecular, bright, dark, lower and upper polariton populations and 
                  coherences <sigma_k(+) sigma_k(-)> respectively for each time step of the evolution"""
         
-        state = self.initial_state() # build initial state
+        state = self.initial_state(K0) # build initial state
         t_fs, y_vals = self.full_integration(tf, state, ti = 0.0)
         y_vals = y_vals.T
-        n_k_arr, n_M_arr, n_L_arr, n_U_arr, n_B_arr, n_D_arr, sigsig_arr, asig_k_arr = self.calculate_diagonal_elements(state, kspace) # calculate observables for initial state
+        n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag = self.calculate_diagonal_elements(state, kspace) # calculate observables for initial state
+        n_k_arr, n_M_arr, n_L_arr, n_U_arr, n_B_arr, n_D_arr, sigsig_arr, asig_k_arr = [np.zeros((len(t_fs), self.Nk), dtype=float) for _ in range(8)]
+        n_k_arr[0][:] = n_k_diag
+        n_M_arr[0][:] = n_M_diag
+        n_L_arr[0][:] = n_L_diag
+        n_U_arr[0][:] = n_U_diag
+        n_B_arr[0][:] = n_B_diag
+        n_D_arr[0][:] = n_D_diag
+        sigsig_arr[0][:] = sigsig_diag
+        asig_k_arr[0][:] = asig_k_diag
         for i in range(1,len(t_fs)):
             state = y_vals[i] 
             n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag = self.calculate_diagonal_elements(state, kspace) # calculate observables for evolved state 
-            n_k_arr = np.append(n_k_arr, n_k_diag)
-            n_M_arr = np.append(n_M_arr, n_M_diag)
-            n_L_arr = np.append(n_L_arr, n_L_diag)
-            n_U_arr = np.append(n_U_arr, n_U_diag)
-            n_B_arr = np.append(n_B_arr, n_B_diag)
-            n_D_arr = np.append(n_D_arr, n_D_diag)
-            sigsig_arr = np.append(sigsig_arr, sigsig_diag)
-            asig_k_arr = np.append(asig_k_arr, asig_k_diag)
-        assert len(n_k_arr) == self.Nk*len(t_fs), 'Length of evolved photonic population array does not have the required dimensions'
-        assert len(n_M_arr) == self.Nk*len(t_fs), 'Length of evolved molecular population array does not have the required dimensions'
-        assert len(n_L_arr) == self.Nk*len(t_fs), 'Length of evolved lower polariton population array does not have the required dimensions'
-        assert len(n_U_arr) == self.Nk*len(t_fs), 'Length of evolved upper polariton population array does not have the required dimensions'
-        assert len(n_B_arr) == self.Nk*len(t_fs), 'Length of evolved bright exciton population array does not have the required dimensions'
-        assert len(n_D_arr) == self.Nk*len(t_fs), 'Length of evolved dark exciton population array does not have the required dimensions'
+            n_k_arr[i][:] = n_k_diag
+            n_M_arr[i][:] = n_M_diag
+            n_L_arr[i][:] = n_L_diag
+            n_U_arr[i][:] = n_U_diag
+            n_B_arr[i][:] = n_B_diag
+            n_D_arr[i][:] = n_D_diag
+            sigsig_arr[i][:] = sigsig_diag
+            asig_k_arr[i][:] = asig_k_diag
+        #assert len(n_k_arr) == self.Nk*len(t_fs), 'Length of evolved photonic population array does not have the required dimensions'
+        #assert len(n_M_arr) == self.Nk*len(t_fs), 'Length of evolved molecular population array does not have the required dimensions'
+        #assert len(n_L_arr) == self.Nk*len(t_fs), 'Length of evolved lower polariton population array does not have the required dimensions'
+        #assert len(n_U_arr) == self.Nk*len(t_fs), 'Length of evolved upper polariton population array does not have the required dimensions'
+        #assert len(n_B_arr) == self.Nk*len(t_fs), 'Length of evolved bright exciton population array does not have the required dimensions'
+        #assert len(n_D_arr) == self.Nk*len(t_fs), 'Length of evolved dark exciton population array does not have the required dimensions'
         return t_fs, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr # sigsig_arr, asig_k_arr
         
     def cavity_velocity(self, K):
@@ -793,7 +803,7 @@ class HTC:
         if savefig:
             plt.savefig(fname = 'evolution.jpg', format = 'jpg')
 
-    def plot_waterfall(self, n_L = False, n_B = False, n_k = False, savefig = False, tf = 101.1, kspace = False, legend = False, step = 100, threeD = False):
+    def plot_waterfall(self, n_L = False, n_B = False, n_D = False, n_k = False, savefig = False, tf = 101.1, kspace = False, legend = False, step = 100, threeD = False, K0 = 50.0):
         """Plots selected time snapshot of the evolution of either the lower polariton, the bright or the photon population as a waterfall plot.
 
         Inputs:  n_L [bool] - if True, plot lower polariton population
@@ -812,7 +822,7 @@ class HTC:
         #step = 2*step*self.dt
         slices = np.arange(0.0, tf, step)
         #tf *= self.EV_TO_FS
-        times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables_all_k(tf, kspace = kspace)
+        times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables_all_k(tf, kspace = kspace, K0 = K0)
         times *= self.EV_TO_FS # convert to femtoseconds for plotting
         slices *= self.EV_TO_FS # convert to femtoseconds for plotting
         fig = plt.figure(figsize=(10,6), layout = 'tight')
@@ -826,13 +836,19 @@ class HTC:
             if threeD:
                 ax.set_zlabel('$n_{B}(r_n)$')
             else:
-                ax.set_ylabel('$n_{L}(r_n)$')
+                ax.set_ylabel('$n_{B}(r_n)$')       
+        if n_D:
+            n_arr = n_D_arr
+            if threeD:
+                ax.set_zlabel('$n_{D}(r_n)$')
+            else:
+                ax.set_ylabel('$n_{D}(r_n)$')
         if n_k:
             n_arr = n_k_arr
             if threeD:
                 ax.set_zlabel('$n_{phot}(r_n)$')
             else:
-                ax.set_ylabel('$n_{L}(r_n)$')
+                ax.set_ylabel('$n_{phot}(r_n)$')
         if n_L:
             n_arr = n_L_arr
             if threeD:
@@ -848,7 +864,8 @@ class HTC:
                 continue
             else:
                 index = index[0]
-            n_i = n_arr[index*self.Nk:(index+1)*self.Nk]
+            #n_i = n_arr[index*self.Nk:(index+1)*self.Nk]
+            n_i = n_arr[index][:]
             r_of_nmax = np.append(r_of_nmax, self.Ks[np.where(n_i == np.max(n_i))])
             if threeD:
                 if kspace:
@@ -1132,8 +1149,8 @@ class HTC:
         fit_v_of_msd = v(times, popt[0], popt[1])
         
         fig, ax = plt.subplots(1,2,figsize = (9,4), layout = 'tight')
-        ax[0].plot(times, msd_arr, label = 'data') 
-        ax[0].plot(times, fit_data, label = 'fit', ls = '--') 
+        ax[0].plot(times, msd_arr)#, label = 'data') 
+        #ax[0].plot(times, fit_data, label = 'fit', ls = '--') 
         ax[0].set_xlabel('time [$fs$]', fontsize=14)
         ax[0].set_ylabel('md [$\mu m$]', fontsize=14)
         
@@ -1159,13 +1176,13 @@ class HTC:
             for axis in ['top','bottom','left','right']:
                 ax[i].spines[axis].set_linewidth(1.3)
             ax[i].grid(alpha = 0.2)
-            ax[i].legend()    
+        ax[1].legend()    
 
         fig.suptitle('Position and Velocity of MD of Lower Polariton Distrubution', fontsize=16)
         if savefig:
             plt.savefig(fname = filename, format = 'jpg')
 
-        return p_weight, e_weight, avg_v, fit_v_of_msd[30]
+        return p_weight, e_weight, avg_v, fit_v_of_msd[30], popt[1]
 
     def plot_v_wrt_k(self, K0s, tf = 100.0, npgradient = False):
         #K0s = np.arange(30, 80, 10)
@@ -1173,13 +1190,15 @@ class HTC:
         e_weights = np.array([])
         vvalsnp = np.array([])
         vvals = np.array([])
-
+        p0s = np.array([])
+        
         for i in K0s:
-            p_weight, e_weight, vvalnp, vval = self.plot_n_L_peak_velocity(savefig = True, filename = f'v_at_k0_{i}_S_10.jpg', tf = tf, npgradient = npgradient, K0 = i) 
+            p_weight, e_weight, vvalnp, vval, p0 = self.plot_n_L_peak_velocity(savefig = True, filename = f'v_at_k0_{i}_S_10.jpg', tf = tf, npgradient = npgradient, K0 = i) 
             p_weights = np.append(p_weights, p_weight)
             e_weights = np.append(e_weights, e_weight)
             vvalsnp = np.append(vvals, vval)
             vvals = np.append(vvals, vval)
+            p0s = np.append(p0s, p0)
 
         v_c, v_L, v_U = self.group_velocity_expected(Ks_auto = False, all_Ks = K0s)
 
@@ -1195,8 +1214,9 @@ class HTC:
         ax.grid(alpha = 0.2)
         ax.legend()
         S = self.params['S']
-        ax.set_title(f'Polariton Group Velocities (S = {S})')
-        plt.savefig(fname = 'velocities_np_gradient.jpg', format = 'jpg')
+        Gz = self.params['Gam_z']
+        ax.set_title(f'Polariton Group Velocities (S = {S}, Gz = {Gz})')
+        plt.savefig(fname = 'velocities_np_gradient_dephasing.jpg', format = 'jpg')
 
         fig1, ax1 = plt.subplots(1,1,figsize = (3,2))
         ax1.plot(p_weights, 1000*v_L, marker = '.', label = 'expected', ls = '--')
@@ -1210,9 +1230,9 @@ class HTC:
         ax1.grid(alpha = 0.2)
         ax1.legend()
         ax1.set_title(f'Polariton Group Velocities (S = {S})')
-        plt.savefig(fname = 'velocities_curvefit.jpg', format = 'jpg')
+        plt.savefig(fname = 'velocities_curvefit_dephasing.jpg', format = 'jpg')
         
-        return p_weights, e_weights, vvals, vvalsnp
+        return p_weights, e_weights, vvals, vvalsnp, p0s
 
 if __name__ == '__main__':
     logging.basicConfig(
