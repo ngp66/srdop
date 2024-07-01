@@ -660,26 +660,27 @@ class HTC:
         state = self.initial_state() # build initial state
         t_fs, y_vals = self.full_integration(tf, state, ti = 0.0)
         y_vals = y_vals.T
-        n_k_arr, n_M_arr, n_L_arr, n_U_arr, n_B_arr, n_D_arr, sigsig_arr, asig_k_arr = self.calculate_diagonal_elements(state, kspace) # calculate observables for initial state
-        n_k_arr = n_k_arr[fixed_position_index]
-        n_M_arr = n_M_arr[fixed_position_index]
-        n_L_arr = n_L_arr[fixed_position_index]
-        n_U_arr = n_U_arr[fixed_position_index]
-        n_B_arr = n_B_arr[fixed_position_index]
-        n_D_arr = n_D_arr[fixed_position_index]
-        sigsig_arr = sigsig_arr[fixed_position_index]
-        asig_k_arr = asig_k_arr[fixed_position_index]
+        n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag = self.calculate_diagonal_elements(state, kspace) # calculate observables for initial state
+        n_k_arr, n_M_arr, n_L_arr, n_U_arr, n_B_arr, n_D_arr, sigsig_arr, asig_k_arr = [np.zeros(self.Nk, dtype=float) for _ in range(8)]
+        n_k_arr[0] = n_k_diag[fixed_position_index]
+        n_M_arr[0] = n_M_diag[fixed_position_index]
+        n_L_arr[0] = n_L_diag[fixed_position_index]
+        n_U_arr[0] = n_U_diag[fixed_position_index]
+        n_B_arr[0] = n_B_diag[fixed_position_index]
+        n_D_arr[0] = n_D_diag[fixed_position_index]
+        sigsig_arr[0] = sigsig_diag[fixed_position_index]
+        asig_k_arr[0] = asig_k_diag[fixed_position_index]
         for i in range(1,len(t_fs)):
             state = y_vals[i]
             n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag = self.calculate_diagonal_elements(state, kspace) # calculate observables for evolved state
-            n_k_arr = np.append(n_k_arr, n_k_diag[fixed_position_index])
-            n_M_arr = np.append(n_M_arr, n_M_diag[fixed_position_index])
-            n_L_arr = np.append(n_L_arr, n_L_diag[fixed_position_index])
-            n_U_arr = np.append(n_U_arr, n_U_diag[fixed_position_index])
-            n_B_arr = np.append(n_B_arr, n_B_diag[fixed_position_index])
-            n_D_arr = np.append(n_D_arr, n_D_diag[fixed_position_index])
-            sigsig_arr = np.append(sigsig_arr, sigsig_diag[fixed_position_index])
-            asig_k_arr = np.append(asig_k_arr, asig_k_diag[fixed_position_index])
+            n_k_arr[i] = n_k_diag[fixed_position_index]
+            n_M_arr[i] = n_M_diag[fixed_position_index]
+            n_L_arr[i] = n_L_diag[fixed_position_index]
+            n_U_arr[i] = n_U_diag[fixed_position_index]
+            n_B_arr[i] = n_B_diag[fixed_position_index]
+            n_D_arr[i] = n_D_diag[fixed_position_index]
+            sigsig_arr[i] = sigsig_diag[fixed_position_index]
+            asig_k_arr[i] = asig_k_diag[fixed_position_index]
         assert len(n_k_arr) == len(t_fs), 'Length of evolved photonic population array does not have the required dimensions'
         assert len(n_M_arr) == len(t_fs), 'Length of evolved molecular population array does not have the required dimensions'
         assert len(n_L_arr) == len(t_fs), 'Length of evolved lower polariton population array does not have the required dimensions'
@@ -1272,3 +1273,4 @@ if __name__ == '__main__':
     #htc.plot_evolution(tf = 100.1, savefig = True, fixed_position_index = 16, kspace = False)
     #htc.plot_initial_populations(kspace = False)
     #htc.plot_waterfall(n_L = True, tf = 100, step = 10, kspace = False, legend = True)
+    htc.plot_waterfall(n_B = True, savefig = True, tf = 600, step = 80, legend = True, K0 = 80.0)
