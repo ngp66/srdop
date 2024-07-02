@@ -430,7 +430,6 @@ class HTC:
         # Save initial state
         t_index = 0
         assert solver.t == t_eval[t_index], 'Solver initial time incorrect'
-        #self.record_observables(t_index, solver.y) # record observables for initial state
         states.append(solver.y)
         solver_t.append(solver.t)
         t_index += 1
@@ -443,7 +442,6 @@ class HTC:
                 soln = solver.dense_output() # interpolation function for the last timestep
                 while solver.t >= next_t: # until soln has been evaluated at all grid points up to solver time
                     y = soln(next_t)
-                    #self.record_observables(t_index, y) # extract relevant observables from state y 
                     states.append(y)
                     t_index += 1
                     if t_index >= num_t: # reached the end of our grid, stop solver
@@ -568,13 +566,14 @@ class HTC:
             return n_k, n_L, n_U, sigsig, sig_plus, asig_k
         return n_k, n_L, n_U, sigsig, asig_k
 
-    def Julia_comparison(self):
+    def Julia_comparison(self, K0):
         """Returns elements a_k, sigma_k(+), <sigma_k(+) sigma_k(-)> for building equivalent initial state 
            in Julia code. Note that Julia code model contains single photon mode i.e. Q0 = 0 required.
-            
+           
+        Inputs: K0 [float] - central wavenumber of the initial state [unitless; k0 = K0*L/(2pi)]
         Outputs: a, sig_plus, sigsig [floats] - values of a_k, sigma_k(+), <sigma_k(+) sigma_k(-)> for self.initial_state()"""
         
-        state = self.initial_state() # build initial state
+        state = self.initial_state(K0 = K0) # build initial state
         a, lp, l0 = self.split_reshape_return(state)
         n_k, n_L, n_U, sigsig, sig_plus, asig_k = self.calculate_upper_lower_polariton(a, lp, l0, Julia = True)
         return a, sig_plus, sigsig
@@ -630,16 +629,16 @@ class HTC:
         assert np.allclose(np.diag(n_D).imag, 0.0), "Dark exciton population has imaginary components"
         assert np.allclose(np.diag(sigsig).imag, 0.0), "The coherences have imaginary components"
         if not kspace:
-            n_M_diag = fftshift(n_M.real) # shift back so that k=0 component is at the center    
+            n_M_diag = np.fft.fftshift(n_M.real) # shift back so that k=0 component is at the center    
         else:
-            n_M_diag = fftshift(np.diag(n_M).real) # shift back so that k=0 component is at the center  
-        n_k_diag = fftshift(np.diag(n_k).real) # shift back so that k=0 component is at the center
-        n_L_diag = fftshift(np.diag(n_L).real) # shift back so that k=0 component is at the center
-        n_U_diag = fftshift(np.diag(n_U).real) # shift back so that k=0 component is at the center
-        n_B_diag = fftshift(np.diag(n_B).real) # shift back so that k=0 component is at the center
-        n_D_diag = fftshift(np.diag(n_D).real) # shift back so that k=0 component is at the center n_M_diag - n_B_diag
-        sigsig_diag = fftshift(np.diag(sigsig).real) # shift back so that k=0 component is at the center
-        asig_k_diag = fftshift(np.diag(asig_k).real) # shift back so that k=0 component is at the center
+            n_M_diag = np.fft.fftshift(np.diag(n_M).real) # shift back so that k=0 component is at the center  
+        n_k_diag = np.fft.fftshift(np.diag(n_k).real) # shift back so that k=0 component is at the center
+        n_L_diag = np.fft.fftshift(np.diag(n_L).real) # shift back so that k=0 component is at the center
+        n_U_diag = np.fft.fftshift(np.diag(n_U).real) # shift back so that k=0 component is at the center
+        n_B_diag = np.fft.fftshift(np.diag(n_B).real) # shift back so that k=0 component is at the center
+        n_D_diag = np.fft.fftshift(np.diag(n_D).real) # shift back so that k=0 component is at the center n_M_diag - n_B_diag
+        sigsig_diag = np.fft.fftshift(np.diag(sigsig).real) # shift back so that k=0 component is at the center
+        asig_k_diag = np.fft.fftshift(np.diag(asig_k).real) # shift back so that k=0 component is at the center
         return n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag
         
     def calculate_evolved_observables_fixed_k(self, tf = 100.0, fixed_position_index = 1, kspace = False):
@@ -693,6 +692,7 @@ class HTC:
         Inputs:  tf [float] - integration time in seconds
                  kspace [bool] - if True, calculate observables in k space. If False, calculate in real space
                  Note that sigsig_arr always returned in k space
+                 K0 [float] - central wavenumber of the initial state [unitless; k0 = K0*L/(2pi)]
         Outputs: t_fs, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr [arrays of floats]: arrays of 
                  integration times, photon, molecular, bright, dark, lower and upper polariton populations and 
                  coherences <sigma_k(+) sigma_k(-)> respectively for each time step of the evolution"""
@@ -815,9 +815,9 @@ class HTC:
                  step [float] - time step that defines array of snapshot times. Although full evolution is calculated, only snapshots at times separated
                  by 2*step*self.dt are plotted
                  threeD [bool] - if True, plot the time snapshots on a 3D plot rather than a 2D waterfall plot
+                 K0 [float] - central wavenumber of the intial population [unitless; k0 = K0*L/(2pi)]
         Outputs: r_of_nmax [array of floats] - array of r/k values that give the location of the peak of the wavepacket distribution at each time snapshot"""
         
-        #step = 2*step*self.dt
         slices = np.arange(0.0, tf, step)
         times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables_all_k(tf, kspace = kspace, K0 = K0)
         times *= self.EV_TO_FS # convert to femtoseconds for plotting
@@ -1035,6 +1035,7 @@ class HTC:
         Inputs:  tf [float] - integration time in seconds
                  kspace [bool] - if True, calculate observables in k space. If False, calculate in real space
                  Note that sigsig_arr always returned in k space
+                 K0 [float] - central wavenumber of the initial population [unitless; k0 = K0*L/(2pi)]
         Outputs: t_fs, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr [arrays of floats]: arrays of 
                  integration times, photon, molecular, bright, dark, lower and upper polariton populations and 
                  coherences <sigma_k(+) sigma_k(-)> respectively for each time step of the evolution"""
@@ -1054,10 +1055,12 @@ class HTC:
         """Plots selected time snapshots of the evolution of the lower polariton population as a waterfall plot in real space.
 
         Inputs:  savefig [bool] - if True, saves plot as 'plot_waterfall.jpg'
-                 tf [float] - final time for the evolution of the wavepacket in seconds (transformation to femtoseconds performed internally by code)
+                 tf [float] - final time for the evolution of the wavepacket in seconds (transformation to 
+                 femtoseconds performed internally by code)
                  legend [bool] - if True, include legend with times of the time snapshots
-                 step [float] - time step that defines array of snapshot times. Although full evolution is calculated, only snapshots at times separated
-                 by 2*step*self.dt are plotted
+                 step [float] - time step that defines array of snapshot times. Although full evolution is calculated,
+                 only snapshots at times separated by step are plotted
+                 K0 [float] - central wavenumber of the initial population [unitless; k0 = K0*L/(2pi)]
         Outputs: r_of_nmax [array of floats] - locations of the peak at each snapshot time"""
         
         slices = np.arange(0.0, tf, step)
@@ -1109,6 +1112,7 @@ class HTC:
         Inputs:  savefig [bool] - if True, saves plots as 'state_i.jpg' and 'velocity_of_peak.jpg' 
                  tf [float] - integration time in seconds (conversion to femtoseconds performed internally)
                  kspace [bool] - if True, time snapshots plotted over the array of K-values self.Ks. If False, plot in real space
+                 K0 [float] - central wavenumber of the initial population [unitless; k0 = K0*L/(2pi)]
         Outputs: r_of_nmax [array of floats] - locations of the peak at each integration time
                  v_of_nmax [array of floats] - velocities of the peak at each integration time"""
 
@@ -1183,7 +1187,16 @@ class HTC:
         return p_weight, e_weight, avg_v, fit_v_of_msd[30], popt[1]
 
     def plot_v_wrt_k(self, K0s, tf = 100.0, npgradient = False):
-        #K0s = np.arange(30, 80, 10)
+        """Calculates and plots the velocity of the mean position of the wavepacket by estimating the gradient of its trajectory
+           through fitting a curve to it and/or by using np.gradient().
+           Inputs:  K0s [float] - array of central wavenumbers of the initial population [unitless; k0s = K0s*L/(2pi)] 
+                    tf [float] - integration time in seconds (conversion to femtoseconds performed internally)
+                    npgradient [bool] - if True, plot velocity both as the derivative of a fit to the trajectory
+                    and as a direct np.gradient. Note that the np.gradient routine might result in a more jittery pattern.
+           Outputs: p_weights, e_weights, vvals, vvalsnp, p0s [floats] - respectively, arrays of polariton and exciton 
+                    concentrations, wavepacket velocities extracted through curve fitting and np.gradient routines 
+                    and powers of the curve fit [used to estimate whether transport is diffusive/ballistic]
+        """
         p_weights = np.array([])
         e_weights = np.array([])
         vvalsnp = np.array([])
