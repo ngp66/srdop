@@ -486,7 +486,6 @@ class HTC:
     def quick_integration(self, state, tf, ti = 0.0):
         """Integrates the equations of motion from t = 0 to tf using solve_ivp."""
         assert tf > ti, 'Final time is smaller than initial time'
-        #state_i = self.initial_state()
         ivp = solve_ivp(self.eoms, [ti,tf], state, dense_output=True)
         state_f = ivp.y[:,-1]
         #state_t = ivp.t[-1]
@@ -604,7 +603,6 @@ class HTC:
             n_U = ifft(nuft1, axis=-1, norm = 'ortho')
         else:
             #nmft1 = fft(n_M, axis=0) # double fourier transform
-            print('i am here')
             n_M = sigsig
             nbft1 = ifft(n_B, axis=-1, norm = 'ortho') # double fourier transform
             n_B = fft(nbft1, axis=0, norm = 'ortho')
@@ -631,7 +629,6 @@ class HTC:
         assert np.allclose(np.diag(n_B).imag, 0.0), "Bright exciton population has imaginary components"
         assert np.allclose(np.diag(n_D).imag, 0.0), "Dark exciton population has imaginary components"
         assert np.allclose(np.diag(sigsig).imag, 0.0), "The coherences have imaginary components"
-        #assert np.allclose(np.diag(asig_k).imag, 0.0), "The coherences have imaginary components"  # is that possible?
         if not kspace:
             n_M_diag = fftshift(n_M.real) # shift back so that k=0 component is at the center    
         else:
@@ -730,7 +727,7 @@ class HTC:
         #assert len(n_U_arr) == self.Nk*len(t_fs), 'Length of evolved upper polariton population array does not have the required dimensions'
         #assert len(n_B_arr) == self.Nk*len(t_fs), 'Length of evolved bright exciton population array does not have the required dimensions'
         #assert len(n_D_arr) == self.Nk*len(t_fs), 'Length of evolved dark exciton population array does not have the required dimensions'
-        return t_fs, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr # sigsig_arr, asig_k_arr
+        return t_fs, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr
         
     def cavity_velocity(self, K):
         """Calculates cavity group velocity in units of micrometer/fs.
@@ -822,7 +819,6 @@ class HTC:
         
         #step = 2*step*self.dt
         slices = np.arange(0.0, tf, step)
-        #tf *= self.EV_TO_FS
         times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables_all_k(tf, kspace = kspace, K0 = K0)
         times *= self.EV_TO_FS # convert to femtoseconds for plotting
         slices *= self.EV_TO_FS # convert to femtoseconds for plotting
@@ -896,15 +892,16 @@ class HTC:
             plt.savefig(fname = 'plot_waterfall.jpg', format = 'jpg')
         return r_of_nmax   
     
-    def plot_initial_populations(self, savefig = False, kspace = False):
+    def plot_initial_populations(self, savefig = False, kspace = False, K0 = 40.0):
         """Plots upper, lower polariton and photonic populations on one figure in either k space or real space. 
            Plots molecular, bright and dark populations in real space on another figure.
 
            Inputs:  savefig [bool] - if True, saves plots as 'state_i.jpg' and 'brightdark_populations.jpg'
                     kspace [bool] - if True, plot first figure in k space. If False, plot figure in real space 
-                    Note that second figure is always in real space"""
+                    Note that second figure is always in real space
+                    K0 [float] - central wavenumber of the wavepacket [unitless; k0 = 2pi/L K0]"""
         
-        state_i = self.initial_state()
+        state_i = self.initial_state(K0 = K0)
         n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag = self.calculate_diagonal_elements(state_i, kspace)
         fig1, ax1 = plt.subplots(5,1,figsize = (12,10),sharex = True)
         ax1[0].scatter(self.Ks, n_U_diag, marker = '.')
@@ -996,7 +993,7 @@ class HTC:
         ax.legend()
         fig.savefig('figures/julia_comparison.png', dpi=350, bbox_inches='tight')
 
-    ###################################### Lighter functions for calculating working only with n_L populations ##############################################
+    ################################# Lighter functions for calculating working only with n_L populations #################################
     def calculate_n_L(self, state, kspace = True):
         """Calculates only lower polariton population for a given state. Use instead of calculate_observables() 
         for faster code execution when only n_L is required.
