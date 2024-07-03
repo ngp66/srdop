@@ -72,6 +72,7 @@ class HTC:
             'rtol':1e-6, # solver tolerance
             'dt': 0.5, # determines interval at which solution is evaluated. Does not effect the accuracy of solution, only the grid at which observables are recorded
             'exciton': False, # if True, initial state is pure exciton; if False, a lower polariton initial state is created
+            'photon': False, # if True, initial state is pure exciton; if False, a lower polariton initial state is created
             #'lowpass': 0.01, # used for smoothing oscillations in observable plots
             }
 
@@ -216,6 +217,7 @@ class HTC:
         b, bd, bn, bi = Hvib.b, Hvib.bd, Hvib.n, Hvib.i
         sm, sp, sz, si = Pauli.m, Pauli.p, Pauli.z, Pauli.i
         exciton = params['exciton']
+        photon = params['photon']
         A = 0.5*params['epsilon']*np.kron(sz, bi) +\
                 params['omega_nu']*np.kron(si, bn) +\
                 params['omega_nu']*np.sqrt(params['S'])*np.kron(sz, b+bd) + 0j
@@ -287,6 +289,9 @@ class HTC:
         if exciton:
             coeffs['X_k'] = np.zeros_like(shifted_Ks)
             coeffs['Y_k'] = np.ones_like(shifted_Ks)
+        elif photon:
+            coeffs['X_k'] = np.ones_like(shifted_Ks)
+            coeffs['Y_k'] = np.zeros_like(shifted_Ks)            
         else:
             coeffs['X_k'] = np.sqrt(0.5  + 0.5**2 * (params['epsilon'] - consts['omega'])/consts['zeta_k'])
             coeffs['Y_k'] = np.sqrt(0.5  - 0.5**2 * (params['epsilon'] - consts['omega'])/consts['zeta_k'])
@@ -729,7 +734,7 @@ class HTC:
         #assert len(n_D_arr) == self.Nk*len(t_fs), 'Length of evolved dark exciton population array does not have the required dimensions'
         return t_fs, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr
 
-        def calculate_evolved_observables_all_k_nondiag(self, tf = 100.0, kspace = False, K0 = 50.0):
+    def calculate_evolved_observables_all_k_nondiag(self, tf = 100.0, kspace = False, K0 = 50.0):
         """Evolves self.initial_state() from time ti = 0.0 to time tf in time steps self.dt. Calculates 
            diagonal elements of populations for each time step in either real or k space.
         
@@ -923,7 +928,7 @@ class HTC:
             else:
                 index = index[0]
             #n_i = n_arr[index*self.Nk:(index+1)*self.Nk]
-            n_i = n_arr[index][:]
+            n_i = n_arr[index,:]
             r_of_nmax = np.append(r_of_nmax, self.Ks[np.where(n_i == np.max(n_i))])
             if threeD:
                 if kspace:
@@ -1104,12 +1109,14 @@ class HTC:
         state = self.initial_state(K0) # build initial state
         t_fs, y_vals = self.full_integration(tf, state, ti = 0.0)
         y_vals = y_vals.T
-        n_L_arr = self.calculate_diagonal_n_L(state, kspace) # calculate observables for initial state
+        n_L = self.calculate_diagonal_n_L(state, kspace) # calculate observables for initial state
+        n_L_arr = np.zeros((len(t_fs), self.Nk), dtype=float)
+        n_L_arr[0,:] = n_L
         for i in range(1,len(t_fs)):
             state = y_vals[i] 
             n_L_diag = self.calculate_diagonal_n_L(state, kspace) # calculate observables for evolved state 
-            n_L_arr = np.append(n_L_arr, n_L_diag)
-        assert len(n_L_arr) == self.Nk*len(t_fs), 'Length of evolved lower polariton population array does not have the required dimensions'
+            n_L_arr[i,:] = n_L_diag
+        #assert len(n_L_arr) == self.Nk*len(t_fs), 'Length of evolved lower polariton population array does not have the required dimensions'
         return t_fs, n_L_arr
 
     def plot_waterfall_n_L(self, savefig = False, tf = 101.1, legend = False, step = 100, K0 = 50.0):
@@ -1140,7 +1147,8 @@ class HTC:
                 continue
             else:
                 index = index[0]
-            n_i = n_arr[index*self.Nk:(index+1)*self.Nk]
+            #n_i = n_arr[index*self.Nk:(index+1)*self.Nk]
+            n_i = n_arr[index,:]
             r_of_nmax = np.append(r_of_nmax, self.Ks[np.where(n_i == np.max(n_i))])
             ax.plot(self.Ks*self.params['delta_r'], n_i + i * offset, label = f't = {slices[i]:.2E}', zorder = (len(slices)-i), color=colors[i])
         r_of_nmax *= self.params['delta_r']
@@ -1178,26 +1186,27 @@ class HTC:
                  v_of_nmax [array of floats] - velocities of the peak at each integration time"""
 
         k_index = np.where(self.Ks == K0) #self.params['K_0'])
-        p_weight = (fftshift(self.coeffs['X_k'])[k_index])**2
-        e_weight = (fftshift(self.coeffs['Y_k'])[k_index])**2
+        p_weight = (np.fft.fftshift(self.coeffs['X_k'])[k_index])**2
+        e_weight = (np.fft.fftshift(self.coeffs['Y_k'])[k_index])**2
         
         print('Photonic weight, X_k^2 =', p_weight, 'Molecular weight, Y_k^2 =', e_weight)
 
         if plot_hopfield:
             fig1, ax1 = plt.subplots(1,1,figsize = (2,2))
-            ax1.plot(self.ks, fftshift(self.coeffs['X_k']), label = 'X_k')
-            ax1.plot(self.ks, fftshift(self.coeffs['Y_k']), label = 'Y_k')
+            ax1.plot(self.ks, np.fft.fftshift(self.coeffs['X_k']), label = 'X_k')
+            ax1.plot(self.ks, np.fft.fftshift(self.coeffs['Y_k']), label = 'Y_k')
             ax1.set_title('Hopfield coefficients')
             ax1.set_xlabel('k [$\mu m$]')
             ax1.legend()
             
         times, n_arr= self.calculate_evolved_n_L_all_k(tf, kspace = False, K0 = K0)
         times *= self.EV_TO_FS # rescale for plotting
-        n_0 = n_arr[0:self.Nk]
+        #n_0 = n_arr[0:self.Nk]
+        n_0 = n_arr[0,:]
         msd_val = np.average(self.params['delta_r']*self.Ks, weights=n_0) # position of weighted mean (i.e ~ position of peak)
         msd_arr = np.array([msd_val])
         for i in range(1, len(times)):
-            n_i = n_arr[i*self.Nk:(i+1)*self.Nk]
+            n_i = n_arr[i,:]
             msd_val = np.average(self.params['delta_r']*self.Ks, weights=n_i) # weighted mean
             msd_arr = np.append(msd_arr, msd_val)
         
@@ -1335,6 +1344,7 @@ if __name__ == '__main__':
         'rtol': 1e-7, # solver tolerance
         'dt': 0.5, # determines interval at which solution is evaluated. Does not effect the accuracy of solution, only the grid at which observables are recorded
         'exciton': False, # if True, initial state is pure exciton; if False, a lower polariton initial state is created
+        'photon': False, # if True, initial state is pure exciton; if False, a lower polariton initial state is created
         }
     
     #julia_comparison('data/julia/gn0.45N1e5Z1.csv') # Gam_z = 0.01 # Julia comparison 2024-06-20
