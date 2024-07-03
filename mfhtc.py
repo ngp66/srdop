@@ -594,17 +594,17 @@ class HTC:
         n_B = self.calculate_n_bright_real(l0, lp) # bright state population (real space)
         n_k, n_L, n_U, sigsig, asig_k = self.calculate_upper_lower_polariton(a, lp, l0) # k-space, initial populations (not evolved)
         if not kspace:
-            nkft1 = fft(n_k, axis=0, norm = 'ortho') # double fourier transform
-            n_k = ifft(nkft1, axis=-1, norm = 'ortho')
-            nlft1 = fft(n_L, axis=0, norm = 'ortho') # double fourier transform
-            n_L = ifft(nlft1, axis=-1, norm = 'ortho')
-            nuft1 = fft(n_U, axis=0, norm = 'ortho') # double fourier transform
-            n_U = ifft(nuft1, axis=-1, norm = 'ortho')
+            nkft1 = ifft(n_k, axis=0, norm = 'ortho') # double fourier transform
+            n_k = fft(nkft1, axis=-1, norm = 'ortho')
+            nlft1 = ifft(n_L, axis=0, norm = 'ortho') # double fourier transform
+            n_L = fft(nlft1, axis=-1, norm = 'ortho')
+            nuft1 = ifft(n_U, axis=0, norm = 'ortho') # double fourier transform
+            n_U = fft(nuft1, axis=-1, norm = 'ortho')
         else:
             #nmft1 = fft(n_M, axis=0) # double fourier transform
             n_M = sigsig
-            nbft1 = ifft(n_B, axis=-1, norm = 'ortho') # double fourier transform
-            n_B = fft(nbft1, axis=0, norm = 'ortho')
+            nbft1 = fft(n_B, axis=-1, norm = 'ortho') # double fourier transform
+            n_B = ifft(nbft1, axis=0, norm = 'ortho')
         n_D = n_M - n_B
         return n_k, n_M, n_L, n_U, sigsig, asig_k, n_B, n_D
         
@@ -843,9 +843,9 @@ class HTC:
         if n_k:
             n_arr = n_k_arr
             if threeD:
-                ax.set_zlabel('$n_{phot}(r_n)$')
+                ax.set_zlabel('$n_{k}(r_n)$')
             else:
-                ax.set_ylabel('$n_{phot}(r_n)$')
+                ax.set_ylabel('$n_{k}(r_n)$')
         if n_L:
             n_arr = n_L_arr
             if threeD:
