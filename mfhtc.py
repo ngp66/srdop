@@ -747,41 +747,41 @@ class HTC:
         n_k, n_M, n_L, n_U, n_B, n_D, sigsig, asig_k, a = self.calculate_observables(state, kspace) # calculate observables for initial state
         n_k_arr_real, n_M_arr_real, n_L_arr_real, n_U_arr_real, n_B_arr_real, n_D_arr_real, sigsig_arr_real, asig_k_arr_real = [np.zeros((len(t_fs), self.Nk, self.Nk), dtype=float) for _ in range(8)]
         n_k_arr_imag, n_M_arr_imag, n_L_arr_imag, n_U_arr_imag, n_B_arr_imag, n_D_arr_imag, sigsig_arr_imag, asig_k_arr_imag = [np.zeros((len(t_fs), self.Nk, self.Nk), dtype=float) for _ in range(8)]
-        n_k_arr_real[0][:][:] = n_k.real
-        n_M_arr_real[0][:][:] = n_M.real
-        n_L_arr_real[0][:][:] = n_L.real
-        n_U_arr_real[0][:][:] = n_U.real
-        n_B_arr_real[0][:][:] = n_B.real
-        n_D_arr_real[0][:][:] = n_D.real
-        sigsig_arr_real[0][:][:] = sigsig.real
-        asig_k_arr_real[0][:][:] = asig_k.real
-        n_k_arr_imag[0][:][:] = n_k.imag
-        n_M_arr_imag[0][:][:] = n_M.imag
-        n_L_arr_imag[0][:][:] = n_L.imag
-        n_U_arr_imag[0][:][:] = n_U.imag
-        n_B_arr_imag[0][:][:] = n_B.imag
-        n_D_arr_imag[0][:][:] = n_D.imag
-        sigsig_arr_imag[0][:][:] = sigsig.imag
-        asig_k_arr_imag[0][:][:] = asig_k.imag
+        n_k_arr_real[0,:,:] = n_k.real
+        n_M_arr_real[0,:,:] = n_M.real
+        n_L_arr_real[0,:,:] = n_L.real
+        n_U_arr_real[0,:,:] = n_U.real
+        n_B_arr_real[[0,:,:] = n_B.real
+        n_D_arr_real[0,:,:] = n_D.real
+        sigsig_arr_real[0,:,:] = sigsig.real
+        asig_k_arr_real[[0,:,:] = asig_k.real
+        n_k_arr_imag[0,:,:] = n_k.imag
+        n_M_arr_imag[0,:,:] = n_M.imag
+        n_L_arr_imag[0,:,:] = n_L.imag
+        n_U_arr_imag[0,:,:] = n_U.imag
+        n_B_arr_imag[[0,:,:] = n_B.imag
+        n_D_arr_imag[0,:,:] = n_D.imag
+        sigsig_arr_imag[0,:,:] = sigsig.imag
+        asig_k_arr_imag[0,:,:] = asig_k.imag
         for i in range(1,len(t_fs)):
             state = y_vals[i] 
-            n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag = self.calculate_observables(state, kspace) # calculate observables for evolved state 
-            n_k_arr_real[i][:][:] = n_k.real
-            n_M_arr_real[i][:][:] = n_M.real
-            n_L_arr_real[i][:][:] = n_L.real
-            n_U_arr_real[i][:][:] = n_U.real
-            n_B_arr_real[i][:][:] = n_B.real
-            n_D_arr_real[i][:][:] = n_D.real
-            sigsig_arr_real[i][:][:] = sigsig.real
-            asig_k_arr_real[i][:][:] = asig_k.real
-            n_k_arr_imag[i][:][:] = n_k.imag
-            n_M_arr_imag[i][:][:] = n_M.imag
-            n_L_arr_imag[i][:][:] = n_L.imag
-            n_U_arr_imag[i][:][:] = n_U.imag
-            n_B_arr_imag[i][:][:] = n_B.imag
-            n_D_arr_imag[i][:][:] = n_D.imag
-            sigsig_arr_imag[i][:][:] = sigsig.imag
-            asig_k_arr_imag[i][:][:] = asig_k.imag
+            n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag, a = self.calculate_observables(state, kspace) # calculate observables for evolved state 
+            n_k_arr_real[i,:,:] = n_k.real
+            n_M_arr_real[i,:,:] = n_M.real
+            n_L_arr_real[i,:,:] = n_L.real
+            n_U_arr_real[i,:,:] = n_U.real
+            n_B_arr_real[i,:,:] = n_B.real
+            n_D_arr_real[i,:,:] = n_D.real
+            sigsig_arr_real[i,:,:] = sigsig.real
+            asig_k_arr_real[i,:,:] = asig_k.real
+            n_k_arr_imag[i,:,:] = n_k.imag
+            n_M_arr_imag[i,:,:] = n_M.imag
+            n_L_arr_imag[i,:,:] = n_L.imag
+            n_U_arr_imag[i,:,:] = n_U.imag
+            n_B_arr_imag[i,:,:] = n_B.imag
+            n_D_arr_imag[i,:,:] = n_D.imag
+            sigsig_arr_imag[i,:,:] = sigsig.imag
+            asig_k_arr_imag[i,:,:] = asig_k.imag
         #assert len(n_k_arr) == self.Nk*len(t_fs), 'Length of evolved photonic population array does not have the required dimensions'
         #assert len(n_M_arr) == self.Nk*len(t_fs), 'Length of evolved molecular population array does not have the required dimensions'
         #assert len(n_L_arr) == self.Nk*len(t_fs), 'Length of evolved lower polariton population array does not have the required dimensions'
