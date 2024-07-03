@@ -702,25 +702,25 @@ class HTC:
         y_vals = y_vals.T
         n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag = self.calculate_diagonal_elements(state, kspace) # calculate observables for initial state
         n_k_arr, n_M_arr, n_L_arr, n_U_arr, n_B_arr, n_D_arr, sigsig_arr, asig_k_arr = [np.zeros((len(t_fs), self.Nk), dtype=float) for _ in range(8)]
-        n_k_arr[0][:] = n_k_diag
-        n_M_arr[0][:] = n_M_diag
-        n_L_arr[0][:] = n_L_diag
-        n_U_arr[0][:] = n_U_diag
-        n_B_arr[0][:] = n_B_diag
-        n_D_arr[0][:] = n_D_diag
-        sigsig_arr[0][:] = sigsig_diag
-        asig_k_arr[0][:] = asig_k_diag
+        n_k_arr[0,:] = n_k_diag
+        n_M_arr[0,:] = n_M_diag
+        n_L_arr[0,:] = n_L_diag
+        n_U_arr[0,:] = n_U_diag
+        n_B_arr[0,:] = n_B_diag
+        n_D_arr[0,:] = n_D_diag
+        sigsig_arr[0,:] = sigsig_diag
+        asig_k_arr[0,:] = asig_k_diag
         for i in range(1,len(t_fs)):
             state = y_vals[i] 
-            n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag = self.calculate_diagonal_elements(state, kspace) # calculate observables for evolved state 
-            n_k_arr[i][:] = n_k_diag
-            n_M_arr[i][:] = n_M_diag
-            n_L_arr[i][:] = n_L_diag
-            n_U_arr[i][:] = n_U_diag
-            n_B_arr[i][:] = n_B_diag
-            n_D_arr[i][:] = n_D_diag
-            sigsig_arr[i][:] = sigsig_diag
-            asig_k_arr[i][:] = asig_k_diag
+            n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag, a = self.calculate_diagonal_elements(state, kspace) # calculate observables for evolved state 
+            n_k_arr[i,:] = n_k_diag
+            n_M_arr[i,:] = n_M_diag
+            n_L_arr[i,:] = n_L_diag
+            n_U_arr[i,:] = n_U_diag
+            n_B_arr[i,:] = n_B_diag
+            n_D_arr[i,:] = n_D_diag
+            sigsig_arr[i,:] = sigsig_diag
+            asig_k_arr[i,:] = asig_k_diag
         #assert len(n_k_arr) == self.Nk*len(t_fs), 'Length of evolved photonic population array does not have the required dimensions'
         #assert len(n_M_arr) == self.Nk*len(t_fs), 'Length of evolved molecular population array does not have the required dimensions'
         #assert len(n_L_arr) == self.Nk*len(t_fs), 'Length of evolved lower polariton population array does not have the required dimensions'
