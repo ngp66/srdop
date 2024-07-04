@@ -583,7 +583,7 @@ class HTC:
         n_k, n_L, n_U, sigsig, sig_plus, asig_k = self.calculate_upper_lower_polariton(a, lp, l0, Julia = True)
         return a, sig_plus, sigsig
         
-    def calculate_observables(self, state, kspace = True):
+    def calculate_observables(self, state, kspace = False):
         """Calculates coherences, polariton, photon and molecular populations for a given state. 
         
         Inputs:  state [array of floats] - array (a, lp, l) of length self.state_length. To get the correct 
@@ -594,10 +594,10 @@ class HTC:
                  polariton, upper polariton, bright, dark populations, coherences <sigma_k'(+) sigma_k(-)> and 
                  <a_k' sigma_k(+)> respectively for all k and k' values""" 
         
-        a, lp, l0 = self.split_reshape_return(state) 
-        n_M = self.calculate_n_molecular_real(l0) # molecular population (real space)
-        n_B = self.calculate_n_bright_real(l0, lp) # bright state population (real space)
-        n_k, n_L, n_U, sigsig, asig_k = self.calculate_upper_lower_polariton(a, lp, l0) # k-space, initial populations (not evolved)
+        a_i, lp_i, l0_i = self.split_reshape_return(state) 
+        n_M = self.calculate_n_molecular_real(l0_i) # molecular population (real space)
+        n_B = self.calculate_n_bright_real(l0_i, lp_i) # bright state population (real space)
+        n_k, n_L, n_U, sigsig, asig_k = self.calculate_upper_lower_polariton(a_i, lp_i, l0_i) # k-space, initial populations (not evolved)
         if not kspace:
             nkft1 = ifft(n_k, axis=0, norm = 'ortho') # double fourier transform
             n_k = fft(nkft1, axis=-1, norm = 'ortho')
@@ -606,7 +606,6 @@ class HTC:
             nuft1 = ifft(n_U, axis=0, norm = 'ortho') # double fourier transform
             n_U = fft(nuft1, axis=-1, norm = 'ortho')
         else:
-            #nmft1 = fft(n_M, axis=0) # double fourier transform
             n_M = sigsig
             nbft1 = fft(n_B, axis=-1, norm = 'ortho') # double fourier transform
             n_B = ifft(nbft1, axis=0, norm = 'ortho')
