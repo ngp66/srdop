@@ -468,7 +468,7 @@ class HTC:
         logger.info('...done ({:.0f}s)'.format(compute_time))
         return t_eval, states
 
-    def full_integration(self, tf, y0=None, ti = 0.0, dt = None):
+    def full_integration(self, tf, y0=None, ti = 0.0, dt = None, K0val = 50.0):
         """Integrates the equations of motion from state y0 
         at t = 0 to tf using solve_ivp.
         Evaluates on grid spacing dt (default self.params['dt'])
@@ -477,7 +477,7 @@ class HTC:
         if dt is None:
             dt = self.params['dt']
         if y0 is None:
-            y0 = self.initial_state()
+            y0 = self.initial_state(K0 = K0val)
         t_eval = np.arange(ti, tf, dt) # in natural units 
         ivp = solve_ivp(self.eoms, [ti,tf], y0, t_eval=t_eval,
                         method='DOP853',
@@ -690,7 +690,7 @@ class HTC:
         assert len(n_D_arr) == len(t_fs), 'Length of evolved dark exciton population array does not have the required dimensions'
         return t_fs, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr 
 
-    def calculate_evolved_observables_all_k(self, tf = 100.0, kspace = False, K0 = 50.0):
+    def calculate_evolved_observables_all_k(self, tf = 100.0, kspace = False, K0val = 50.0):
         """Evolves self.initial_state() from time ti = 0.0 to time tf in time steps self.dt. Calculates 
            diagonal elements of populations for each time step in either real or k space.
         
@@ -702,7 +702,7 @@ class HTC:
                  integration times, photon, molecular, bright, dark, lower and upper polariton populations and 
                  coherences <sigma_k(+) sigma_k(-)> respectively for each time step of the evolution"""
         
-        state = self.initial_state(K0) # build initial state
+        state = self.initial_state(K0 = K0val) # build initial state
         t_fs, y_vals = self.full_integration(tf, state, ti = 0.0)
         y_vals = y_vals.T
         n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag = self.calculate_diagonal_elements(state, kspace) # calculate observables for initial state
@@ -735,7 +735,7 @@ class HTC:
         #assert len(n_D_arr) == self.Nk*len(t_fs), 'Length of evolved dark exciton population array does not have the required dimensions'
         return t_fs, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr
 
-    def calculate_evolved_observables_all_k_nondiag(self, tf = 100.0, kspace = False, K0 = 50.0):
+    def calculate_evolved_observables_all_k_nondiag(self, tf = 100.0, kspace = False, K0val = 50.0):
         """Evolves self.initial_state() from time ti = 0.0 to time tf in time steps self.dt. Calculates 
            diagonal elements of populations for each time step in either real or k space.
         
@@ -747,7 +747,7 @@ class HTC:
                  integration times, photon, molecular, bright, dark, lower and upper polariton populations and 
                  coherences <sigma_k(+) sigma_k(-)> respectively for each time step of the evolution"""
         
-        state = self.initial_state(K0) # build initial state
+        state = self.initial_state(K0 = K0val) # build initial state
         t_fs, y_vals = self.full_integration(tf, state, ti = 0.0)
         y_vals = y_vals.T
         n_k, n_M, n_L, n_U, n_B, n_D, sigsig, asig_k, a = self.calculate_observables(state, kspace) # calculate observables for initial state
@@ -869,7 +869,7 @@ class HTC:
         if savefig:
             plt.savefig(fname = 'evolution.jpg', format = 'jpg')
 
-    def plot_waterfall(self, n_L = False, n_B = False, n_D = False, n_k = False, savefig = False, tf = 101.1, kspace = False, legend = False, step = 100, threeD = False, K0 = 50.0):
+    def plot_waterfall(self, n_L = False, n_B = False, n_D = False, n_k = False, savefig = False, tf = 101.1, kspace = False, legend = False, step = 100, threeD = False, K0val = 50.0):
         """Plots selected time snapshot of the evolution of either the lower polariton, the bright or the photon population as a waterfall plot.
 
         Inputs:  n_L [bool] - if True, plot lower polariton population
@@ -887,7 +887,7 @@ class HTC:
         Outputs: r_of_nmax [array of floats] - array of r/k values that give the location of the peak of the wavepacket distribution at each time snapshot"""
         
         slices = np.arange(0.0, tf, step)
-        times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables_all_k(tf, kspace = kspace, K0 = K0)
+        times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables_all_k(tf, kspace = kspace, K0val = K0val)
         times *= self.EV_TO_FS # convert to femtoseconds for plotting
         slices *= self.EV_TO_FS # convert to femtoseconds for plotting
         fig = plt.figure(figsize=(10,6), layout = 'tight')
@@ -960,7 +960,7 @@ class HTC:
             plt.savefig(fname = 'plot_waterfall.jpg', format = 'jpg')
         return r_of_nmax   
     
-    def plot_initial_populations(self, savefig = False, kspace = False, K0 = 40.0):
+    def plot_initial_populations(self, savefig = False, kspace = False, K0val = 40.0):
         """Plots upper, lower polariton and photonic populations on one figure in either k space or real space. 
            Plots molecular, bright and dark populations in real space on another figure.
 
@@ -969,7 +969,7 @@ class HTC:
                     Note that second figure is always in real space
                     K0 [float] - central wavenumber of the wavepacket [unitless; k0 = 2pi/L K0]"""
         
-        state_i = self.initial_state(K0 = K0)
+        state_i = self.initial_state(K0 = K0val)
         n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag = self.calculate_diagonal_elements(state_i, kspace)
         fig1, ax1 = plt.subplots(5,1,figsize = (12,10),sharex = True)
         ax1[0].scatter(self.Ks, n_U_diag, marker = '.')
@@ -1096,7 +1096,7 @@ class HTC:
         n_L_diag = fftshift(np.diag(n_L).real) # shift back so that k=0 component is at the center
         return n_L_diag
         
-    def calculate_evolved_n_L_all_k(self, tf = 100.0, kspace = False, K0 = 50.0):
+    def calculate_evolved_n_L_all_k(self, tf = 100.0, kspace = False, K0val = 50.0):
         """Evolves self.initial_state() from time ti = 0.0 to time tf in time steps self.dt. Calculates 
            diagonal elements of populations for each time step in either real or k space.
         
@@ -1108,7 +1108,7 @@ class HTC:
                  integration times, photon, molecular, bright, dark, lower and upper polariton populations and 
                  coherences <sigma_k(+) sigma_k(-)> respectively for each time step of the evolution"""
         
-        state = self.initial_state(K0) # build initial state
+        state = self.initial_state(K0 = K0val) # build initial state
         t_fs, y_vals = self.full_integration(tf, state, ti = 0.0)
         y_vals = y_vals.T
         n_L = self.calculate_diagonal_n_L(state, kspace) # calculate observables for initial state
@@ -1121,7 +1121,7 @@ class HTC:
         #assert len(n_L_arr) == self.Nk*len(t_fs), 'Length of evolved lower polariton population array does not have the required dimensions'
         return t_fs, n_L_arr
 
-    def plot_waterfall_n_L(self, savefig = False, tf = 101.1, legend = False, step = 100, K0 = 50.0):
+    def plot_waterfall_n_L(self, savefig = False, tf = 101.1, legend = False, step = 100, K0val = 50.0):
         """Plots selected time snapshots of the evolution of the lower polariton population as a waterfall plot in real space.
 
         Inputs:  savefig [bool] - if True, saves plot as 'plot_waterfall.jpg'
@@ -1134,7 +1134,7 @@ class HTC:
         Outputs: r_of_nmax [array of floats] - locations of the peak at each snapshot time"""
         
         slices = np.arange(0.0, tf, step)
-        times, n_arr = self.calculate_evolved_n_L_all_k(tf, kspace = False, K0 = K0)
+        times, n_arr = self.calculate_evolved_n_L_all_k(tf, kspace = False, K0val = K0val)
         times *= self.EV_TO_FS # convert to femtoseconds for plotting
         slices *= self.EV_TO_FS # convert to femtoseconds for plotting
         fig = plt.figure(figsize=(10,6), layout = 'tight')
@@ -1201,7 +1201,7 @@ class HTC:
             ax1.set_xlabel('k [$\mu m$]')
             ax1.legend()
             
-        times, n_arr= self.calculate_evolved_n_L_all_k(tf, kspace = False, K0 = K0)
+        times, n_arr= self.calculate_evolved_n_L_all_k(tf, kspace = False, K0val = K0)
         times *= self.EV_TO_FS # rescale for plotting
         #n_0 = n_arr[0:self.Nk]
         n_0 = n_arr[0,:]
