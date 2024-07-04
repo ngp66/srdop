@@ -869,7 +869,7 @@ class HTC:
         Outputs: r_of_nmax [array of floats] - array of r/k values that give the location of the peak of the wavepacket distribution at each time snapshot"""
         
         slices = np.arange(0.0, tf, step)
-        times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables_all_k(tf, kspace = kspace, K0val = K0val)
+        times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables_all_k(tf, kspace = False, K0val = K0val)
         times *= self.EV_TO_FS # convert to femtoseconds for plotting
         slices *= self.EV_TO_FS # convert to femtoseconds for plotting
         fig = plt.figure(figsize=(10,6), layout = 'tight')
@@ -1372,4 +1372,4 @@ if __name__ == '__main__':
     #htc.plot_evolution(tf = 100.1, savefig = True, fixed_position_index = 16, kspace = False)
     #htc.plot_initial_populations(kspace = False)
     #htc.plot_waterfall(n_L = True, tf = 100, step = 10, kspace = False, legend = True)
-    htc.plot_waterfall(n_k = True, savefig = True, tf = 35, step = 15, legend = True, K0val = 80.0)
+    htc.plot_waterfall_n_k(savefig = True, tf = 35, step = 15, legend = True, K0val = 80.0)
