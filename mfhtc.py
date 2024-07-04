@@ -501,7 +501,7 @@ class HTC:
            Outputs: n_k [array of floats] - photon populations at all positions/wavevectors"""
         if kspace:
             return np.outer(np.conj(a),a)*self.Nm 
-        a_r = ifft(a, norm = 'ortho')
+        a_r = fft(a, norm = 'ortho')
         n_k = np.conj(a_r)*a_r*self.Nm
         return n_k
         
@@ -717,7 +717,7 @@ class HTC:
         asig_k_arr[0,:] = asig_k_diag
         for i in range(1,len(t_fs)):
             state = y_vals[i] 
-            n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag, a = self.calculate_diagonal_elements(state, kspace) # calculate observables for evolved state 
+            n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag = self.calculate_diagonal_elements(state, kspace) # calculate observables for evolved state 
             n_k_arr[i,:] = n_k_diag
             n_M_arr[i,:] = n_M_diag
             n_L_arr[i,:] = n_L_diag
