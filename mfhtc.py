@@ -702,37 +702,29 @@ class HTC:
                  integration times, photon, molecular, bright, dark, lower and upper polariton populations and 
                  coherences <sigma_k(+) sigma_k(-)> respectively for each time step of the evolution"""
         
-        state = self.initial_state(K0 = K0val) # build initial state
-        t_fs, y_vals = self.full_integration(tf, state, ti = 0.0)
+        t_fs, y_vals = self.full_integration(tf, ti = 0.0, K0val = K0val)
         y_vals = y_vals.T
-        n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag = self.calculate_diagonal_elements(state, kspace) # calculate observables for initial state
+        n_k_diag0, n_M_diag0, n_L_diag0, n_U_diag0, n_B_diag0, n_D_diag0, sigsig_diag0, asig_k_diag0 = self.calculate_diagonal_elements(y_vals[0,:], kspace) # calculate observables for initial state
         n_k_arr, n_M_arr, n_L_arr, n_U_arr, n_B_arr, n_D_arr, sigsig_arr, asig_k_arr = [np.zeros((len(t_fs), self.Nk), dtype=float) for _ in range(8)]
-        n_k_arr[0,:] = n_k_diag
-        n_M_arr[0,:] = n_M_diag
-        n_L_arr[0,:] = n_L_diag
-        n_U_arr[0,:] = n_U_diag
-        n_B_arr[0,:] = n_B_diag
-        n_D_arr[0,:] = n_D_diag
-        sigsig_arr[0,:] = sigsig_diag
-        asig_k_arr[0,:] = asig_k_diag
+        n_k_arr[0,:] = n_k_diag0
+        n_M_arr[0,:] = n_M_diag0
+        n_L_arr[0,:] = n_L_diag0
+        n_U_arr[0,:] = n_U_diag0
+        n_B_arr[0,:] = n_B_diag0
+        n_D_arr[0,:] = n_D_diag0
+        sigsig_arr[0,:] = sigsig_diag0
+        asig_k_arr[0,:] = asig_k_diag0
         for i in range(1,len(t_fs)):
-            state = y_vals[i,:] 
-            assert len(state) == self.state_length, 'Evolved state length is incorrect'
-            n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag = self.calculate_diagonal_elements(state, kspace) # calculate observables for evolved state 
-            n_k_arr[i,:] = n_k_diag
-            n_M_arr[i,:] = n_M_diag
-            n_L_arr[i,:] = n_L_diag
-            n_U_arr[i,:] = n_U_diag
-            n_B_arr[i,:] = n_B_diag
-            n_D_arr[i,:] = n_D_diag
-            sigsig_arr[i,:] = sigsig_diag
-            asig_k_arr[i,:] = asig_k_diag
-        #assert len(n_k_arr) == self.Nk*len(t_fs), 'Length of evolved photonic population array does not have the required dimensions'
-        #assert len(n_M_arr) == self.Nk*len(t_fs), 'Length of evolved molecular population array does not have the required dimensions'
-        #assert len(n_L_arr) == self.Nk*len(t_fs), 'Length of evolved lower polariton population array does not have the required dimensions'
-        #assert len(n_U_arr) == self.Nk*len(t_fs), 'Length of evolved upper polariton population array does not have the required dimensions'
-        #assert len(n_B_arr) == self.Nk*len(t_fs), 'Length of evolved bright exciton population array does not have the required dimensions'
-        #assert len(n_D_arr) == self.Nk*len(t_fs), 'Length of evolved dark exciton population array does not have the required dimensions'
+            assert len(y_vals[i,:]) == self.state_length, 'Length of evolved state is incorrect'
+            n_k_diag1, n_M_diag1, n_L_diag1, n_U_diag1, n_B_diag1, n_D_diag1, sigsig_diag1, asig_k_diag1 = self.calculate_diagonal_elements(y_vals[i,:], kspace) # calculate observables for evolved state 
+            n_k_arr[i,:] = n_k_diag1
+            n_M_arr[i,:] = n_M_diag1
+            n_L_arr[i,:] = n_L_diag1
+            n_U_arr[i,:] = n_U_diag1
+            n_B_arr[i,:] = n_B_diag1
+            n_D_arr[i,:] = n_D_diag1
+            sigsig_arr[i,:] = sigsig_diag1
+            asig_k_arr[i,:] = asig_k_diag1
         return t_fs, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr
 
     def calculate_evolved_observables_all_k_nondiag(self, tf = 100.0, kspace = False, K0val = 50.0):
