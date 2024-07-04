@@ -376,7 +376,7 @@ class HTC:
             reshaped = [np.copy(X) for X in reshaped]
         return reshaped
         
-    def eoms(self, t, state):
+    def eoms(self, t, state_arr):
         """Equations of motion as in mf_eoms_fourier.pdf
         
            Inputs: t [float]: time. Variable used by solve_ivp in integration routines
@@ -384,17 +384,17 @@ class HTC:
            Outputs: dy_state [array of floats]: state evolved by the equations of motion. Same shape as STATE"""
         
         C = self.coeffs
-        a, lp, l0 = self.split_reshape_return(state) 
+        a_vals, lp_vals, l0_vals = self.split_reshape_return(state_arr) 
         # Calculate DFT
-        alpha = fft(a, axis=0, norm = 'backward')
+        alpha = fft(a_vals, axis=0, norm = 'backward')
         # EQ 1 
-        pre_c = contract('i,in->n', C['12_1'], lp)   
+        pre_c = contract('i,in->n', C['12_1'], lp_vals)   
         post_c = fft(pre_c, axis=0, norm='forward')
-        dy_a = C['11_k'] * a + np.conj(post_c)
+        dy_a = C['11_k'] * a_vals + np.conj(post_c)
         # EQ 2
-        dy_lp = contract('ij,jn->in', C['21_11'], lp) + contract('ai,n,an->in', C['22_10'], np.conj(alpha), l0)
+        dy_lp = contract('ij,jn->in', C['21_11'], lp_vals) + contract('ai,n,an->in', C['22_10'], np.conj(alpha), l0_vals)
         # EQ 3
-        dy_l0 = contract('aj,jn->an', C['31_00'], l0) + C['32_0'] + contract('aj,n,jn->an', C['33_01'], alpha, lp).real
+        dy_l0 = contract('aj,jn->an', C['31_00'], l0_vals) + C['32_0'] + contract('aj,n,jn->an', C['33_01'], alpha, lp_vals).real
         # flatten and concatenate to match input state structure of RK (1d array)
         dy_state = np.concatenate((dy_a, dy_lp, dy_l0), axis=None)
         return dy_state
@@ -505,26 +505,26 @@ class HTC:
         n_ks = np.conj(a_r)*a_r*self.Nm
         return n_ks
         
-    def calculate_n_molecular_real(self, l0): 
+    def calculate_n_molecular_real(self, l0val): 
         """Calculates molecular population in real space.
         
-           Inputs: l0 [array of floats] - values of the matrix lambda_0 at all wavectors self.Ks
+           Inputs: l0val [array of floats] - values of the matrix lambda_0 at all wavectors self.Ks
            Outputs: n_M_r [array of floats] - molecular populations at all positions in real space"""
         
-        zzzl0 = contract('a,an->n', self.consts['zetazeta'], l0) # zeta(i+)zeta(j+)Z(i0i+j+)<lambda(i0)>
+        zzzl0 = contract('a,an->n', self.consts['zetazeta'], l0val) # zeta(i+)zeta(j+)Z(i0i+j+)<lambda(i0)>
         n_M_r = (zzzl0 + 0.5)*self.NE
         return n_M_r
 
-    def calculate_n_bright_real(self, l0, lp): #, kspace = False):
+    def calculate_n_bright_real(self, l0val, lpval): #, kspace = False):
         """Calculates population of bright exciton state in real space.
         
-           Inputs:  l0 [array of floats] - values of the matrix lambda_0 at all wavectors self.Ks
-                    lp [array of floats] - values of the matrix lambda_+ at all wavectors self.Ks
+           Inputs:  l0val [array of floats] - values of the matrix lambda_0 at all wavectors self.Ks
+                    lpval [array of floats] - values of the matrix lambda_+ at all wavectors self.Ks
            Outputs: n_B_r [array of floats] - bright state populations at all positions in real space """
         #print(np.shape(l0), np.shape(lp))
-        zlp = contract('i,in->n', self.consts['zetap'], lp) # zeta(i+)<lambda(i+)>
+        zlp = contract('i,in->n', self.consts['zetap'], lpval) # zeta(i+)<lambda(i+)>
         zzlplp = np.outer(zlp, np.conj(zlp)) # zeta(i+)zeta(j+)<lambda(i+)><lambda(j-)>
-        zzzl0 = contract('a,an->n', self.consts['zetazeta'], l0)
+        zzzl0 = contract('a,an->n', self.consts['zetazeta'], l0val)
         n_B_r = (self.NE - 1)*zzlplp + zzzl0 + 0.5
         return n_B_r
 
