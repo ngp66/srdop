@@ -869,20 +869,20 @@ class HTC:
         Outputs: r_of_nmax [array of floats] - array of r/k values that give the location of the peak of the wavepacket distribution at each time snapshot"""
         
         slices = np.arange(0.0, tf, step)
-        times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables_all_k(tf, kspace = False, K0val = K0val)
+        times, n_k_array, n_M_array, n_B_array, n_D_array, n_L_array, n_U_array, sigsig_array = self.calculate_evolved_observables_all_k(tf, kspace = False, K0val = K0val)
         times *= self.EV_TO_FS # convert to femtoseconds for plotting
         slices *= self.EV_TO_FS # convert to femtoseconds for plotting
         fig, ax = plt.subplots(1, 1, figsize=(10,6), layout = 'tight')
         colors = plt.cm.coolwarm(np.linspace(0,1,len(slices)))
         
-        offset = 0.1 * np.max(n_k_arr)
+        offset = 0.1 * np.max(n_k_array)
         for i in range(len(slices)):
             index = np.where(times == slices[i])[0]
             if len(index) == 0:
                 continue
             else:
                 index = index[0]
-            ax.plot(self.Ks*self.params['delta_r'], n_k_arr[index,:] + i * offset, label = f't = {slices[i]:.2E}', zorder = (len(slices)-i), color=colors[i])
+            ax.plot(self.Ks*self.params['delta_r'], n_k_array[index,:] + i * offset, label = f't = {slices[i]:.2E}', zorder = (len(slices)-i), color=colors[i])
         ax.set_xlabel('$r_n [\mu m]$')
         ax.set_ylabel('$n_{k}(r_n)$')
         ax.set_title('Time Snapshots of Wavepacket Evolution')
