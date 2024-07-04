@@ -922,16 +922,13 @@ class HTC:
                 ax.set_ylabel('$n_{L}(r_n)$')
         assert isinstance(n_arr, np.ndarray), "Please, specify one of n_L, n_B and n_k"
         offset = 0.1 * np.max(n_arr)
-        r_of_nmax = np.array([])
         for i in range(len(slices)):
             index = np.where(times == slices[i])[0]
             if len(index) == 0:
                 continue
             else:
                 index = index[0]
-            #n_i = n_arr[index*self.Nk:(index+1)*self.Nk]
             n_i = n_arr[index,:]
-            r_of_nmax = np.append(r_of_nmax, self.Ks[np.where(n_i == np.max(n_i))])
             if threeD:
                 if kspace:
                     ax.plot(self.Ks, n_i, label = f"t = {slices[i]:.2E}", zdir = 'y', zs=slices[i], zorder = (len(slices)-i), color=colors[i])
@@ -947,7 +944,6 @@ class HTC:
             ax.set_xlabel('$k [\mu m^{-1}]$')
         else:
             ax.set_xlabel('$r_n [\mu m]$')
-            r_of_nmax *= self.params['delta_r']
         ax.set_title('Time Snapshots of Wavepacket Evolution')
         ax.minorticks_on()
         ax.tick_params(axis="both", direction="in", which="both", right=True, top=True, labelsize=13)
@@ -958,7 +954,6 @@ class HTC:
             ax.legend()
         if savefig:
             plt.savefig(fname = 'plot_waterfall.jpg', format = 'jpg')
-        return r_of_nmax   
     
     def plot_initial_populations(self, savefig = False, kspace = False, K0val = 40.0):
         """Plots upper, lower polariton and photonic populations on one figure in either k space or real space. 
@@ -1134,26 +1129,22 @@ class HTC:
         Outputs: r_of_nmax [array of floats] - locations of the peak at each snapshot time"""
         
         slices = np.arange(0.0, tf, step)
-        times, n_arr = self.calculate_evolved_n_L_all_k(tf, kspace = False, K0val = K0val)
+        times, n_array = self.calculate_evolved_n_L_all_k(tf, kspace = False, K0val = K0val)
         times *= self.EV_TO_FS # convert to femtoseconds for plotting
         slices *= self.EV_TO_FS # convert to femtoseconds for plotting
         fig = plt.figure(figsize=(10,6), layout = 'tight')
         ax = fig.add_subplot()
         colors = plt.cm.coolwarm(np.linspace(0,1,len(slices)))
-        assert isinstance(n_arr, np.ndarray), "Please, specify one of n_L, n_B and n_k"
-        offset = 0.1 * np.max(n_arr)
-        r_of_nmax = np.array([])
+        assert isinstance(n_array, np.ndarray), "Please, specify one of n_L, n_B and n_k"
+        offset = 0.1 * np.max(n_array)
         for i in range(len(slices)):
             index = np.where(times == slices[i])[0]
             if len(index) == 0:
                 continue
             else:
                 index = index[0]
-            #n_i = n_arr[index*self.Nk:(index+1)*self.Nk]
-            n_i = n_arr[index,:]
-            r_of_nmax = np.append(r_of_nmax, self.Ks[np.where(n_i == np.max(n_i))])
-            ax.plot(self.Ks*self.params['delta_r'], n_i + i * offset, label = f't = {slices[i]:.2E}', zorder = (len(slices)-i), color=colors[i])
-        r_of_nmax *= self.params['delta_r']
+            n_i_arr = n_array[index,:]
+            ax.plot(self.Ks*self.params['delta_r'], n_i_arr + i * offset, label = f't = {slices[i]:.2E}', zorder = (len(slices)-i), color=colors[i])
         ax.set_xlabel('$r_n [\mu m]$')
         ax.set_ylabel('$n_{L}(r_n)$')
         ax.set_title('Time Snapshots of Wavepacket Evolution')
@@ -1166,7 +1157,6 @@ class HTC:
             ax.legend()
         if savefig:
             plt.savefig(fname = 'plot_waterfall_n_L.jpg', format = 'jpg')
-        return r_of_nmax        
 
     def butter_lowpass_filter(self, data, cutoff, fs, order=5, axis=-1):
         data = np.array(data)
@@ -1356,4 +1346,4 @@ if __name__ == '__main__':
     #htc.plot_evolution(tf = 100.1, savefig = True, fixed_position_index = 16, kspace = False)
     #htc.plot_initial_populations(kspace = False)
     #htc.plot_waterfall(n_L = True, tf = 100, step = 10, kspace = False, legend = True)
-    htc.plot_waterfall(n_B = True, savefig = True, tf = 600, step = 80, legend = True, K0 = 80.0)
+    htc.plot_waterfall(n_k = True, savefig = True, tf = 35, step = 15, legend = True, K0val = 80.0)
