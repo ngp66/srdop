@@ -1356,7 +1356,7 @@ if __name__ == '__main__':
         'omega_nu': 0.0647, # vibrational energy spacing
         'T': 0.026, # k_B T in eV (.0259=300K, .026=302K)
         'gam_nu': 0.01, # vibrational damping rate
-        'A': 0.1, # amplitude of initial wavepacket
+        'Am': 0.1, # amplitude of initial wavepacket
         'K_0': 50.0, # central wavenumber of initial wavepacket
         'sig_0': 4.0, # s.d. of initial wavepacket
         'atol': 1e-7, # solver tolerance
