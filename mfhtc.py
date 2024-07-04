@@ -782,12 +782,6 @@ class HTC:
             n_D_arr_imag[i,:,:] = n_D.imag
             sigsig_arr_imag[i,:,:] = sigsig.imag
             asig_k_arr_imag[i,:,:] = asig_k.imag
-        #assert len(n_k_arr) == self.Nk*len(t_fs), 'Length of evolved photonic population array does not have the required dimensions'
-        #assert len(n_M_arr) == self.Nk*len(t_fs), 'Length of evolved molecular population array does not have the required dimensions'
-        #assert len(n_L_arr) == self.Nk*len(t_fs), 'Length of evolved lower polariton population array does not have the required dimensions'
-        #assert len(n_U_arr) == self.Nk*len(t_fs), 'Length of evolved upper polariton population array does not have the required dimensions'
-        #assert len(n_B_arr) == self.Nk*len(t_fs), 'Length of evolved bright exciton population array does not have the required dimensions'
-        #assert len(n_D_arr) == self.Nk*len(t_fs), 'Length of evolved dark exciton population array does not have the required dimensions'
         return t_fs, n_k_arr_real, n_M_arr_real, n_L_arr_real, n_B_arr_real, n_D_arr_real, n_k_arr_imag, n_M_arr_imag, n_L_arr_imag, n_B_arr_imag, n_D_arr_imag
         
     def cavity_velocity(self, K):
