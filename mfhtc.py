@@ -647,7 +647,7 @@ class HTC:
         asig_k_diag = np.fft.fftshift(np.diag(asig_ks).real) # shift back so that k=0 component is at the center
         return n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag
         
-    def calculate_evolved_observables_fixed_k(self, tf = 100.0, fixed_position_index = 1, kspace = False):
+    def calculate_evolved_observables_fixed_k(self, tf = 100.0, fixed_position_index = 1, kspace = False, K0val = 80.0):
         """Evolves self.initial_state() from time ti = 0.0 to time tf in time steps self.dt. Calculates 
            diagonal elements of populations for each time step in either real or k space and returns values for FIXED_POSITION_INDEX only.
         
@@ -659,7 +659,7 @@ class HTC:
                  integration times, photon, molecular, bright, dark, lower and upper polariton populations and 
                  coherences <sigma_k(+) sigma_k(-)> respectively for each time step of the evolution"""
         
-        state = self.initial_state() # build initial state
+        state = self.initial_state(K0 = K0val) # build initial state
         t_fs, y_vals = self.full_integration(tf, state, ti = 0.0)
         y_vals = y_vals.T
         n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag = self.calculate_diagonal_elements(state, kspace) # calculate observables for initial state
