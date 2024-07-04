@@ -597,20 +597,22 @@ class HTC:
         a_i, lp_i, l0_i = self.split_reshape_return(state) 
         n_M = self.calculate_n_molecular_real(l0_i) # molecular population (real space)
         n_B = self.calculate_n_bright_real(l0_i, lp_i) # bright state population (real space)
-        n_k, n_L, n_U, sigsig, asig_k = self.calculate_upper_lower_polariton(a_i, lp_i, l0_i) # k-space, initial populations (not evolved)
+        n_k_vals, n_L_vals, n_U_vals, sigsig_vals, asig_k_vals = self.calculate_upper_lower_polariton(a_i, lp_i, l0_i) # k-space, initial populations (not evolved)
         if not kspace:
-            nkft1 = ifft(n_k, axis=0, norm = 'ortho') # double fourier transform
+            nkft1 = ifft(n_k_vals, axis=0, norm = 'ortho') # double fourier transform
             n_k = fft(nkft1, axis=-1, norm = 'ortho')
-            nlft1 = ifft(n_L, axis=0, norm = 'ortho') # double fourier transform
+            nlft1 = ifft(n_L_vals, axis=0, norm = 'ortho') # double fourier transform
             n_L = fft(nlft1, axis=-1, norm = 'ortho')
-            nuft1 = ifft(n_U, axis=0, norm = 'ortho') # double fourier transform
+            nuft1 = ifft(n_U_vals, axis=0, norm = 'ortho') # double fourier transform
             n_U = fft(nuft1, axis=-1, norm = 'ortho')
+            n_D = n_M - n_B
+            return n_k, n_M, n_L, n_U, sigsig_vals, asig_k_vals, n_B, n_D
         else:
             n_M = sigsig
             nbft1 = fft(n_B, axis=-1, norm = 'ortho') # double fourier transform
             n_B = ifft(nbft1, axis=0, norm = 'ortho')
-        n_D = n_M - n_B
-        return n_k, n_M, n_L, n_U, sigsig, asig_k, n_B, n_D
+            n_D = n_M - n_B
+        return n_k_vals, n_M, n_L_vals, n_U_vals, sigsig_vals, asig_k_vals, n_B, n_D
         
     def calculate_diagonal_elements(self, state, kspace):
         """Calculates diagonal elements of the coherence, polariton, photon and molecular population
