@@ -872,8 +872,9 @@ class HTC:
         times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables_all_k(tf, kspace = False, K0val = K0val)
         times *= self.EV_TO_FS # convert to femtoseconds for plotting
         slices *= self.EV_TO_FS # convert to femtoseconds for plotting
-        fig = plt.figure(figsize=(10,6), layout = 'tight')
-
+        fig, ax = plt.subplots(1, 1, figsize=(10,6), layout = 'tight')
+        colors = plt.cm.coolwarm(np.linspace(0,1,len(slices)))
+        
         offset = 0.1 * np.max(n_k_arr)
         for i in range(len(slices)):
             index = np.where(times == slices[i])[0]
