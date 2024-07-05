@@ -800,46 +800,6 @@ class HTC:
         if savefig:
             plt.savefig(fname = 'evolution.jpg', format = 'jpg')
             
-    def plot_waterfall_n_k(self, savefig = False, tf = 30.1, legend = False, step = 15, threeD = False, K0val = 80.0):
-        """SIMPLIFIED FOR DEBUGGING Plots selected time snapshot of the evolution of the photon population as a waterfall plot.
-
-        Inputs:  savefig [bool] - if True, saves plot as 'plot_waterfall.jpg'
-                 tf [float] - final time for the evolution of the wavepacket in seconds (transformation to femtoseconds performed internally by code)
-                 legend [bool] - if True, include legend with times of the time snapshots
-                 step [float] - time step that defines array of snapshot times. Although full evolution is calculated, only snapshots at times separated
-                 by 2*step*self.dt are plotted
-                 threeD [bool] - if True, plot the time snapshots on a 3D plot rather than a 2D waterfall plot
-                 K0 [float] - central wavenumber of the intial population [unitless; k0 = K0*L/(2pi)]
-        Outputs: r_of_nmax [array of floats] - array of r/k values that give the location of the peak of the wavepacket distribution at each time snapshot"""
-        
-        slices = np.arange(0.0, tf, step)
-        times, n_k_array, n_M_array, n_B_array, n_D_array, n_L_array, n_U_array, sigsig_array = self.calculate_evolved_observables_all_k(tf, kspace = False, K0val = K0val)
-        times *= self.EV_TO_FS # convert to femtoseconds for plotting
-        slices *= self.EV_TO_FS # convert to femtoseconds for plotting
-        fig, ax = plt.subplots(1, 1, figsize=(10,6), layout = 'tight')
-        colors = plt.cm.coolwarm(np.linspace(0,1,len(slices)))
-        
-        offset = 0.1 * np.max(n_k_array)
-        for i in range(len(slices)):
-            index = np.where(times == slices[i])[0]
-            if len(index) == 0:
-                continue
-            else:
-                index = index[0]
-            ax.plot(self.Ks*self.params['delta_r'], n_k_array[index,:] + i * offset, label = f't = {slices[i]:.2E}', zorder = (len(slices)-i), color=colors[i])
-        ax.set_xlabel('$r_n [\mu m]$')
-        ax.set_ylabel('$n_{k}(r_n)$')
-        ax.set_title('Time Snapshots of Wavepacket Evolution')
-        ax.minorticks_on()
-        ax.tick_params(axis="both", direction="in", which="both", right=True, top=True, labelsize=13)
-        for axis in ['top','bottom','left','right']:
-            ax.spines[axis].set_linewidth(1.3)
-        ax.grid(alpha = 0.2)   
-        if legend:
-            ax.legend()
-        if savefig:
-            plt.savefig(fname = 'plot_waterfall.jpg', format = 'jpg')
-            
     def plot_waterfall(self, n_L = False, n_B = False, n_D = False, n_k = False, savefig = False, tf = 101.1, kspace = False, legend = False, step = 100, threeD = False, K0val = 50.0):
         """Plots selected time snapshot of the evolution of either the lower polariton, the bright or the photon population as a waterfall plot.
 
