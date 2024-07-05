@@ -344,7 +344,7 @@ class HTC:
         TLS_matrix = np.array([[0.0,0.0],[0.0,1.0]]) # initially in ground state
         a0, lp0, l00 = [], [], [] 
         a0.append(alpha_k*self.coeffs['X_k']) # expectation values of initial a_k (not rescaled)
-        beta_n = fft(-alpha_k*self.coeffs['Y_k'], axis=0, norm='ortho')  
+        beta_n = ifft(-alpha_k*self.coeffs['Y_k'], axis=0, norm='ortho')  
         beta_n /= np.sqrt(self.NE) # corrected normalisation
         for n in range(self.Nk):
             U_n = expm(np.array([[0.0, beta_n[n]],[-np.conj(beta_n[n]), 0.0]]))
@@ -386,10 +386,10 @@ class HTC:
         C = self.coeffs
         a_vals, lp_vals, l0_vals = self.split_reshape_return(state_arr) 
         # Calculate DFT
-        alpha = fft(a_vals, axis=0, norm = 'backward')
+        alpha = ifft(a_vals, axis=0, norm = 'forward')
         # EQ 1 
         pre_c = contract('i,in->n', C['12_1'], lp_vals)   
-        post_c = fft(pre_c, axis=0, norm='forward')
+        post_c = ifft(pre_c, axis=0, norm='backward')
         dy_a = C['11_k'] * a_vals + np.conj(post_c)
         # EQ 2
         dy_lp = contract('ij,jn->in', C['21_11'], lp_vals) + contract('ai,n,an->in', C['22_10'], np.conj(alpha), l0_vals)
@@ -501,7 +501,7 @@ class HTC:
            Outputs: n_ks [array of floats] - photon populations at all positions/wavevectors"""
         if kspace:
             return np.outer(np.conj(aval),aval)*self.Nm 
-        a_r = fft(aval, norm = 'ortho')
+        a_r = ifft(aval, norm = 'ortho')
         n_ks = np.conj(a_r)*a_r*self.Nm
         return n_ks
         
@@ -525,7 +525,7 @@ class HTC:
         zlp = contract('i,in->n', self.consts['zetap'], lpval) # zeta(i+)<lambda(i+)>
         zzlplp = np.outer(zlp, np.conj(zlp)) # zeta(i+)zeta(j+)<lambda(i+)><lambda(j-)>
         zzzl0 = contract('a,an->n', self.consts['zetazeta'], l0val)
-        n_B_r = (self.NE - 1)*zzlplp + zzzl0 + 0.5
+        n_B_r = (self.NE - 1)*zzlplp + np.diag(zzzl0 + 0.5)
         return n_B_r
 
     def calculate_upper_lower_polariton(self, a_arr, lp_arr, l0_arr, Julia = False): 
@@ -546,13 +546,13 @@ class HTC:
         sNE = np.sqrt(self.NE)
         n_k = self.calculate_n_photon(a_arr, kspace = True) # photonic population, no rescaling (initial state)
         sig_plus = contract('i,in->n', self.consts['zetap'], lp_arr)  # zeta(i+)<lambda(i+)>
-        post_sigp = fft(sig_plus, axis = 0, norm = 'ortho') # (in k-space, negative exponents) 
+        post_sigp = ifft(sig_plus, axis = 0, norm = 'ortho') # (in k-space, negative exponents) 
         asig_k = np.outer(a_arr, post_sigp)*sNm*sNE # expectation value <a_k sigma(k'+)>; includes rescaling
         sigsig_k1 = np.outer(post_sigp, np.conj(post_sigp))*self.NE # first term of <sigma(k'+)sigma(k-)>
         sig_abs_sq = sig_plus * sig_plus.conj()  # zeta(i+)zeta(j+)<lambda(i+)><lambda(j-)>
-        sigsig_k2 = ifft(sig_abs_sq, axis=0, norm='backward') # (in k-space, positive exponents)
+        sigsig_k2 = fft(sig_abs_sq, axis=0, norm='forward') # (in k-space, positive exponents)
         pre_l0 = contract('a,an->n', self.consts['zetazeta'], l0_arr) # zeta(i+)zeta(j+)Z+(i0i+j+)<lambda(i0)> (in real space)
-        post_l0 = ifft(pre_l0, axis = 0, norm = 'backward') # (in k-space, positive exponents)
+        post_l0 = fft(pre_l0, axis = 0, norm = 'forward') # (in k-space, positive exponents)
         sigsig = np.zeros((self.Nk, self.Nk), dtype=complex) # initialise array for <sigma(k'+)sigma(k-)> values
         n_L = np.zeros((self.Nk, self.Nk), dtype=complex) # initialise array for lower polariton population values
         n_U = np.zeros((self.Nk, self.Nk), dtype=complex) # initialise array for upper polariton population values
@@ -599,18 +599,18 @@ class HTC:
         n_B_vals = self.calculate_n_bright_real(l0_i, lp_i) # bright state population (real space)
         n_k_vals, n_L_vals, n_U_vals, sigsig_vals, asig_k_vals = self.calculate_upper_lower_polariton(a_i, lp_i, l0_i) # k-space, initial populations (not evolved)
         if not kspace:
-            nkft1 = ifft(n_k_vals, axis=0, norm = 'ortho') # double fourier transform
-            n_k = fft(nkft1, axis=-1, norm = 'ortho')
-            nlft1 = ifft(n_L_vals, axis=0, norm = 'ortho') # double fourier transform
-            n_L = fft(nlft1, axis=-1, norm = 'ortho')
-            nuft1 = ifft(n_U_vals, axis=0, norm = 'ortho') # double fourier transform
-            n_U = fft(nuft1, axis=-1, norm = 'ortho')
+            nkft1 = fft(n_k_vals, axis=0, norm = 'ortho') # double fourier transform
+            n_k = ifft(nkft1, axis=-1, norm = 'ortho')
+            nlft1 = fft(n_L_vals, axis=0, norm = 'ortho') # double fourier transform
+            n_L = ifft(nlft1, axis=-1, norm = 'ortho')
+            nuft1 = fft(n_U_vals, axis=0, norm = 'ortho') # double fourier transform
+            n_U = ifft(nuft1, axis=-1, norm = 'ortho')
             n_D_vals = n_M_vals - n_B_vals
             return n_k, n_M_vals, n_L, n_U, sigsig_vals, asig_k_vals, n_B_vals, n_D_vals
         else:
             n_M = sigsig
-            nbft1 = fft(n_B_vals, axis=-1, norm = 'ortho') # double fourier transform
-            n_B = ifft(nbft1, axis=0, norm = 'ortho')
+            nbft1 = ifft(n_B_vals, axis=-1, norm = 'ortho') # double fourier transform
+            n_B = fft(nbft1, axis=0, norm = 'ortho')
             n_D = n_M - n_B
         return n_k_vals, n_M, n_L_vals, n_U_vals, sigsig_vals, asig_k_vals, n_B, n_D
         
@@ -966,7 +966,7 @@ class HTC:
                 if kspace:
                     ax.plot(self.Ks, n_i + i * offset, label = f't = {slices[i]:.2E}', color=colors[i])
                 else:
-                    ax.plot(self.Ks*self.params['delta_r'], n_i + i * offset, label = f't = {slices[i]:.2E}', zorder = (len(slices)-i), color=colors[i])
+                    ax.plot(self.Ks*self.params['delta_r'], n_i, label = f't = {slices[i]:.2E}', zorder = (len(slices)-i), color=colors[i])
         if kspace:
             ax.set_xlabel('$k [\mu m^{-1}]$')
         else:
