@@ -662,8 +662,8 @@ class HTC:
         state = self.initial_state(K0 = K0val) # build initial state
         t_fs, y_vals = self.full_integration(tf, state, ti = 0.0)
         y_vals = y_vals.T
-        n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag = self.calculate_diagonal_elements(state, kspace) # calculate observables for initial state
-        n_k_arr, n_M_arr, n_L_arr, n_U_arr, n_B_arr, n_D_arr, sigsig_arr, asig_k_arr = [np.zeros(self.Nk, dtype=float) for _ in range(8)]
+        n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag = self.calculate_diagonal_elements(y_vals[0,:], kspace) # calculate observables for initial state
+        n_k_arr, n_M_arr, n_L_arr, n_U_arr, n_B_arr, n_D_arr, sigsig_arr, asig_k_arr = [np.zeros(t_fs, dtype=float) for _ in range(8)]
         n_k_arr[0] = n_k_diag[fixed_position_index]
         n_M_arr[0] = n_M_diag[fixed_position_index]
         n_L_arr[0] = n_L_diag[fixed_position_index]
@@ -673,8 +673,8 @@ class HTC:
         sigsig_arr[0] = sigsig_diag[fixed_position_index]
         asig_k_arr[0] = asig_k_diag[fixed_position_index]
         for i in range(1,len(t_fs)):
-            state = y_vals[i]
-            n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag = self.calculate_diagonal_elements(state, kspace) # calculate observables for evolved state
+            state_e = y_vals[i,:]
+            n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag = self.calculate_diagonal_elements(state_e, kspace) # calculate observables for evolved state
             n_k_arr[i] = n_k_diag[fixed_position_index]
             n_M_arr[i] = n_M_diag[fixed_position_index]
             n_L_arr[i] = n_L_diag[fixed_position_index]
@@ -727,62 +727,6 @@ class HTC:
             sigsig_arr[i,:] = sigsig_diag1
             asig_k_arr[i,:] = asig_k_diag1
         return t_fs, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr
-
-    def calculate_evolved_observables_all_k_nondiag(self, tf = 100.0, kspace = False, K0val = 50.0):
-        """Evolves self.initial_state() from time ti = 0.0 to time tf in time steps self.dt. Calculates 
-           diagonal elements of populations for each time step in either real or k space.
-        
-        Inputs:  tf [float] - integration time in seconds
-                 kspace [bool] - if True, calculate observables in k space. If False, calculate in real space
-                 Note that sigsig_arr always returned in k space
-                 K0 [float] - central wavenumber of the initial state [unitless; k0 = K0*L/(2pi)]
-        Outputs: t_fs, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr [arrays of floats]: arrays of 
-                 integration times, photon, molecular, bright, dark, lower and upper polariton populations and 
-                 coherences <sigma_k(+) sigma_k(-)> respectively for each time step of the evolution"""
-        
-        state = self.initial_state(K0 = K0val) # build initial state
-        t_fs, y_vals = self.full_integration(tf, state, ti = 0.0)
-        y_vals = y_vals.T
-        n_k, n_M, n_L, n_U, n_B, n_D, sigsig, asig_k, a = self.calculate_observables(state, kspace) # calculate observables for initial state
-        n_k_arr_real, n_M_arr_real, n_L_arr_real, n_U_arr_real, n_B_arr_real, n_D_arr_real, sigsig_arr_real, asig_k_arr_real = [np.zeros((len(t_fs), self.Nk, self.Nk), dtype=float) for _ in range(8)]
-        n_k_arr_imag, n_M_arr_imag, n_L_arr_imag, n_U_arr_imag, n_B_arr_imag, n_D_arr_imag, sigsig_arr_imag, asig_k_arr_imag = [np.zeros((len(t_fs), self.Nk, self.Nk), dtype=float) for _ in range(8)]
-        n_k_arr_real[0,:,:] = n_k.real
-        n_M_arr_real[0,:,:] = n_M.real
-        n_L_arr_real[0,:,:] = n_L.real
-        n_U_arr_real[0,:,:] = n_U.real
-        n_B_arr_real[0,:,:] = n_B.real
-        n_D_arr_real[0,:,:] = n_D.real
-        sigsig_arr_real[0,:,:] = sigsig.real
-        asig_k_arr_real[0,:,:] = asig_k.real
-        n_k_arr_imag[0,:,:] = n_k.imag
-        n_M_arr_imag[0,:,:] = n_M.imag
-        n_L_arr_imag[0,:,:] = n_L.imag
-        n_U_arr_imag[0,:,:] = n_U.imag
-        n_B_arr_imag[0,:,:] = n_B.imag
-        n_D_arr_imag[0,:,:] = n_D.imag
-        sigsig_arr_imag[0,:,:] = sigsig.imag
-        asig_k_arr_imag[0,:,:] = asig_k.imag
-        for i in range(1,len(t_fs)):
-            state = y_vals[i,:] 
-            assert len(state) == self.state_length, 'Evolved state length is incorrect'
-            n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag, a = self.calculate_observables(state, kspace) # calculate observables for evolved state 
-            n_k_arr_real[i,:,:] = n_k.real
-            n_M_arr_real[i,:,:] = n_M.real
-            n_L_arr_real[i,:,:] = n_L.real
-            n_U_arr_real[i,:,:] = n_U.real
-            n_B_arr_real[i,:,:] = n_B.real
-            n_D_arr_real[i,:,:] = n_D.real
-            sigsig_arr_real[i,:,:] = sigsig.real
-            asig_k_arr_real[i,:,:] = asig_k.real
-            n_k_arr_imag[i,:,:] = n_k.imag
-            n_M_arr_imag[i,:,:] = n_M.imag
-            n_L_arr_imag[i,:,:] = n_L.imag
-            n_U_arr_imag[i,:,:] = n_U.imag
-            n_B_arr_imag[i,:,:] = n_B.imag
-            n_D_arr_imag[i,:,:] = n_D.imag
-            sigsig_arr_imag[i,:,:] = sigsig.imag
-            asig_k_arr_imag[i,:,:] = asig_k.imag
-        return t_fs, n_k_arr_real, n_M_arr_real, n_L_arr_real, n_B_arr_real, n_D_arr_real, n_k_arr_imag, n_M_arr_imag, n_L_arr_imag, n_B_arr_imag, n_D_arr_imag
         
     def cavity_velocity(self, K):
         """Calculates cavity group velocity in units of micrometer/fs.
@@ -966,7 +910,7 @@ class HTC:
                 if kspace:
                     ax.plot(self.Ks, n_i + i * offset, label = f't = {slices[i]:.2E}', color=colors[i])
                 else:
-                    ax.plot(self.Ks*self.params['delta_r'], n_i, label = f't = {slices[i]:.2E}', zorder = (len(slices)-i), color=colors[i])
+                    ax.plot(self.Ks*self.params['delta_r'], n_i + i * offset, label = f't = {slices[i]:.2E}', zorder = (len(slices)-i), color=colors[i])
         if kspace:
             ax.set_xlabel('$k [\mu m^{-1}]$')
         else:
@@ -1093,8 +1037,8 @@ class HTC:
                  kspace [bool] - if True, calculate n_L in kspace. If False, calculate in real space
         Outputs: n_L [array of floats] - lower polariton population in either real or k space""" 
         
-        a, lp, l0 = self.split_reshape_return(state) 
-        n_k, n_L, n_U, sigsig, asig_k = self.calculate_upper_lower_polariton(a, lp, l0) # k-space, initial populations (not evolved)
+        a_val, lp_val, l0_val = self.split_reshape_return(state) 
+        n_k, n_L, n_U, sigsig, asig_k = self.calculate_upper_lower_polariton(a_val, lp_val, l0_val) # k-space, initial populations (not evolved)
         if not kspace:
             nlft1 = ifft(n_L, axis=-1, norm = 'ortho') # double fourier transform
             return fft(nlft1, axis=0, norm = 'ortho')
@@ -1130,17 +1074,16 @@ class HTC:
                  integration times, photon, molecular, bright, dark, lower and upper polariton populations and 
                  coherences <sigma_k(+) sigma_k(-)> respectively for each time step of the evolution"""
         
-        state = self.initial_state(K0 = K0val) # build initial state
-        t_fs, y_vals = self.full_integration(tf, state, ti = 0.0)
+        state_i = self.initial_state(K0 = K0val) # build initial state
+        t_fs, y_vals = self.full_integration(tf, state_i, ti = 0.0)
         y_vals = y_vals.T
-        n_L = self.calculate_diagonal_n_L(state, kspace) # calculate observables for initial state
+        n_L = self.calculate_diagonal_n_L(state_i, kspace) # calculate observables for initial state
         n_L_arr = np.zeros((len(t_fs), self.Nk), dtype=float)
         n_L_arr[0,:] = n_L
         for i in range(1,len(t_fs)):
-            state = y_vals[i] 
-            n_L_diag = self.calculate_diagonal_n_L(state, kspace) # calculate observables for evolved state 
+            state_e = y_vals[i,:] 
+            n_L_diag = self.calculate_diagonal_n_L(state_e, kspace) # calculate observables for evolved state 
             n_L_arr[i,:] = n_L_diag
-        #assert len(n_L_arr) == self.Nk*len(t_fs), 'Length of evolved lower polariton population array does not have the required dimensions'
         return t_fs, n_L_arr
 
     def plot_waterfall_n_L(self, savefig = False, tf = 101.1, legend = False, step = 100, K0val = 50.0):
@@ -1220,7 +1163,6 @@ class HTC:
             
         times, n_arr= self.calculate_evolved_n_L_all_k(tf, kspace = False, K0val = K0)
         times *= self.EV_TO_FS # rescale for plotting
-        #n_0 = n_arr[0:self.Nk]
         n_0 = n_arr[0,:]
         msd_val = np.average(self.params['delta_r']*self.Ks, weights=n_0) # position of weighted mean (i.e ~ position of peak)
         msd_arr = np.array([msd_val])
@@ -1240,8 +1182,8 @@ class HTC:
         fit_v_of_msd = v(times, popt[0], popt[1])
         
         fig, ax = plt.subplots(1,2,figsize = (9,4), layout = 'tight')
-        ax[0].plot(times, msd_arr)#, label = 'data') 
-        #ax[0].plot(times, fit_data, label = 'fit', ls = '--') 
+        ax[0].plot(times, msd_arr, label = 'data') 
+        ax[0].plot(times, fit_data, label = 'fit', ls = '--') 
         ax[0].set_xlabel('time [$fs$]', fontsize=14)
         ax[0].set_ylabel('md [$\mu m$]', fontsize=14)
         
