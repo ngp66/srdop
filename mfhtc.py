@@ -893,7 +893,7 @@ class HTC:
                 times *= self.EV_TO_FS # convert to femtoseconds for plotting
                 n_arr = n_D_arr
                 ax.set_ylabel('$n_{D}$')
-                n_i = np.max(n_arr[-1]) # last time
+                n_i = np.sum(n_arr[-1]) # last time
                 m = np.where(K0vals == K0val)
                 n_vals[m] *= n_i
                 p_weights[m] *= p_weight
