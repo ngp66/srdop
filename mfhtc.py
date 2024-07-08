@@ -869,6 +869,35 @@ class HTC:
             ax.legend()
         if savefig:
             plt.savefig(fname = 'plot_waterfall.jpg', format = 'jpg')
+
+    def plot_n_D_fixed_k(self, savefig = False, tf = 101.1, K0vals = np.array([50.0])):
+        """Plots selected time snapshot of the evolution of either the lower polariton, the bright or the photon population as a waterfall plot.
+
+        Inputs:  savefig [bool] - if True, saves plot as 'dark_state_wrt_k.jpg'
+                 tf [float] - final time for the evolution of the wavepacket in seconds (transformation to femtoseconds performed internally by code)
+                 K0vals [float] - array of central wavenumbers of the intial population [unitless; k0 = K0*L/(2pi)] """
+        
+        fig, ax = plt.subplots(1,1,figsize=(10,6), layout = 'tight')
+        n_vals = np.ones_like(K0vals, dtype = float)
+        for K0val in K0vals:
+            times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables_all_k(tf, kspace = kspace, K0val = K0val)
+            times *= self.EV_TO_FS # convert to femtoseconds for plotting
+            n_arr = n_D_arr
+            ax.set_ylabel('$n_{D}(r_n)$')
+            p = np.where(self.Ks == K0val)
+            n_i = n_arr[-1,p] # last time
+            m = np.where(K0vals == K0val)
+            n_vals[m] *= n_i[0,0]
+        ax.plot(K0vals, n_vals, marker = '.', ls = '--', markerfacecolor="blue", markeredgecolor="blue")
+        ax.set_xlabel('$K_0 [\mu m]$')
+        ax.set_title(f'Dark state population after {tf*self.EV_TO_FS:.2E} fs')
+        ax.minorticks_on()
+        ax.tick_params(axis="both", direction="in", which="both", right=True, top=True, labelsize=13)
+        for axis in ['top','bottom','left','right']:
+            ax.spines[axis].set_linewidth(1.3)
+        ax.grid(alpha = 0.2)   
+        if savefig:
+            plt.savefig(fname = 'dark_state_wrt_k.jpg', format = 'jpg')
     
     def plot_initial_populations(self, savefig = False, kspace = False, K0val = 40.0):
         """Plots upper, lower polariton and photonic populations on one figure in either k space or real space. 
