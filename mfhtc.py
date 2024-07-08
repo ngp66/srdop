@@ -800,7 +800,7 @@ class HTC:
         if savefig:
             plt.savefig(fname = 'evolution.jpg', format = 'jpg')
             
-    def plot_waterfall(self, n_L = False, n_B = False, n_D = False, n_k = False, savefig = False, tf = 101.1, kspace = False, legend = False, step = 100, threeD = False, K0val = 50.0):
+    def plot_waterfall(self, n_L = False, n_B = False, n_D = False, n_k = False, savefig = False, tf = 101.1, kspace = False, legend = False, step = 100, K0vals = np.array([50.0])):
         """Plots selected time snapshot of the evolution of either the lower polariton, the bright or the photon population as a waterfall plot.
 
         Inputs:  n_L [bool] - if True, plot lower polariton population
@@ -813,64 +813,48 @@ class HTC:
                  legend [bool] - if True, include legend with times of the time snapshots
                  step [float] - time step that defines array of snapshot times. Although full evolution is calculated, only snapshots at times separated
                  by 2*step*self.dt are plotted
-                 threeD [bool] - if True, plot the time snapshots on a 3D plot rather than a 2D waterfall plot
-                 K0 [float] - central wavenumber of the intial population [unitless; k0 = K0*L/(2pi)]
-        Outputs: r_of_nmax [array of floats] - array of r/k values that give the location of the peak of the wavepacket distribution at each time snapshot"""
+                 K0vals [float] - array of central wavenumbers of the intial populations [unitless; k0 = K0*L/(2pi)] """
         
         slices = np.arange(0.0, tf, step)
-        times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables_all_k(tf, kspace = kspace, K0val = K0val)
-        times *= self.EV_TO_FS # convert to femtoseconds for plotting
         slices *= self.EV_TO_FS # convert to femtoseconds for plotting
-        fig = plt.figure(figsize=(10,6), layout = 'tight')
-        if threeD:
-            ax = fig.add_subplot(projection='3d')
-        else:
-            ax = fig.add_subplot()
+        fig, ax = plt.subplots(1,1,figsize=(10,6), layout = 'tight')
         colors = plt.cm.coolwarm(np.linspace(0,1,len(slices)))
-        if n_B:
-            n_arr = n_B_arr
-            if threeD:
-                ax.set_zlabel('$n_{B}(r_n)$')
-            else:
+        for K0val in K0vals:
+            times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables_all_k(tf, kspace = kspace, K0val = K0val)
+            times *= self.EV_TO_FS # convert to femtoseconds for plotting
+            if n_B:
+                n_arr = n_B_arr
                 ax.set_ylabel('$n_{B}(r_n)$')       
-        if n_D:
-            n_arr = n_D_arr
-            if threeD:
-                ax.set_zlabel('$n_{D}(r_n)$')
-            else:
+            if n_D:
+                n_arr = n_D_arr
                 ax.set_ylabel('$n_{D}(r_n)$')
-        if n_k:
-            n_arr = n_k_arr
-            if threeD:
-                ax.set_zlabel('$n_{k}(r_n)$')
-            else:
+            if n_k:
+                n_arr = n_k_arr
                 ax.set_ylabel('$n_{k}(r_n)$')
-        if n_L:
-            n_arr = n_L_arr
-            if threeD:
-                ax.set_zlabel('$n_{L}(r_n)$')
-            else:
+            if n_L:
+                n_arr = n_L_arr
                 ax.set_ylabel('$n_{L}(r_n)$')
-        assert isinstance(n_arr, np.ndarray), "Please, specify one of n_L, n_B and n_k"
-        offset = 0.1 * np.max(n_arr)
-        for i in range(len(slices)):
-            index = np.where(times == slices[i])[0]
-            if len(index) == 0:
-                continue
-            else:
-                index = index[0]
-            n_i = n_arr[index,:]
-            if threeD:
-                if kspace:
-                    ax.plot(self.Ks, n_i, label = f"t = {slices[i]:.2E}", zdir = 'y', zs=slices[i], zorder = (len(slices)-i), color=colors[i])
-                    ax.set_ylabel('t')
+            offset = 0.1 * np.max(n_arr)
+            for i in range(len(slices)):
+                index = np.where(times == slices[i])[0]
+                if len(index) == 0:
+                    continue
                 else:
-                    ax.plot(self.Ks*self.params['delta_r'], n_i, label = f"t = {slices[i]:.2E}", zdir = 'y', zs=slices[i], zorder = (len(slices)-i), color=colors[i])
-            else:
-                if kspace:
-                    ax.plot(self.Ks, n_i + i * offset, label = f't = {slices[i]:.2E}', color=colors[i])
+                    index = index[0]
+                n_i = n_arr[index,:]
+                K0_ind = np.where(K0vals == K0val)[0]
+                if len(K0_ind) == 0:
+                    continue
                 else:
-                    ax.plot(self.Ks*self.params['delta_r'], n_i + i * offset, label = f't = {slices[i]:.2E}', zorder = (len(slices)-i), color=colors[i])
+                    K0_ind = K0_ind[0]                        
+                if kspace:
+                    ax.plot(self.Ks+np.max(self.Ks)*K0_ind, n_i + i * offset, label = f't = {slices[i]:.2E}', color=colors[i])
+                else:
+                    if K0_ind != 0:
+                        ax.plot(self.Ks*self.params['delta_r']+np.max(self.Ks)*K0_ind, n_i + i * offset, zorder = (len(slices)-i), color=colors[i])
+                    else:
+                        ax.plot(self.Ks*self.params['delta_r']+np.max(self.Ks)*K0_ind, n_i + i * offset, label = f't = {slices[i]:.2E}', zorder = (len(slices)-i), color=colors[i])
+
         if kspace:
             ax.set_xlabel('$k [\mu m^{-1}]$')
         else:
