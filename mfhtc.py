@@ -881,20 +881,25 @@ class HTC:
         fig, ax = plt.subplots(1,1,figsize=(10,6), layout = 'tight')
 
         colors = plt.cm.coolwarm(np.linspace(0,1,len(tfs)))
+
         for t in tfs:
             n_vals = np.ones_like(K0vals, dtype = float)
+            p_weights = np.ones_like(K0vals, dtype = float)
             for K0val in K0vals:
+                k_index = np.where(self.Ks == K0val) #self.params['K_0'])
+                p_weight = (np.fft.fftshift(self.coeffs['X_k'])[k_index])**2
+                e_weight = (np.fft.fftshift(self.coeffs['Y_k'])[k_index])**2
                 times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables_all_k(t, kspace = False, K0val = K0val)
                 times *= self.EV_TO_FS # convert to femtoseconds for plotting
                 n_arr = n_D_arr
-                ax.set_ylabel('$n_{D}(K0)$')
-                p = np.where(self.Ks == K0val)
-                n_i = n_arr[-1,p] # last time
+                ax.set_ylabel('$n_{D}$')
+                n_i = np.max(n_arr[-1]) # last time
                 m = np.where(K0vals == K0val)
-                n_vals[m] *= n_i[0,0]
-                print(m)
-            ax.plot(K0vals, n_vals, marker = '.', ls = '--', color = colors[np.where(tfs ==t)], label = f't = {t:.2E}')
-        ax.set_xlabel('$K_0$')
+                n_vals[m] *= n_i
+                p_weights[m] *= p_weight
+                print('Current K0val =', m[0])
+            ax.plot(p_weights, n_vals, marker = '.', ls = '--', color = colors[np.where(tfs == t)], label = f't = {t:.2E}')
+        ax.set_xlabel('$X_k^2$')
         ax.set_title(f'Dark state population after {t*self.EV_TO_FS:.2E} fs')
         ax.minorticks_on()
         ax.tick_params(axis="both", direction="in", which="both", right=True, top=True, labelsize=13)
@@ -1294,4 +1299,5 @@ if __name__ == '__main__':
     #htc.plot_evolution(tf = 100.1, savefig = True, fixed_position_index = 16, kspace = False)
     #htc.plot_initial_populations(kspace = False)
     #htc.plot_waterfall(n_L = True, tf = 100, step = 10, kspace = False, legend = True)
-    htc.plot_waterfall_n_k(savefig = True, tf = 35, step = 15, legend = True, K0val = 80.0)
+    #htc.plot_waterfall_n_k(savefig = True, tf = 35, step = 15, legend = True, K0val = 80.0)
+    htc.plot_n_D_fixed_k(savefig = True, tfs = np.array([20.1]), K0vals = np.arange(0,120.1,5))
