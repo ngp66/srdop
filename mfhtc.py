@@ -880,7 +880,7 @@ class HTC:
         fig, ax = plt.subplots(1,1,figsize=(10,6), layout = 'tight')
         n_vals = np.ones_like(K0vals, dtype = float)
         for K0val in K0vals:
-            times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables_all_k(tf, kspace = kspace, K0val = K0val)
+            times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables_all_k(tf, kspace = False, K0val = K0val)
             times *= self.EV_TO_FS # convert to femtoseconds for plotting
             n_arr = n_D_arr
             ax.set_ylabel('$n_{D}(r_n)$')
