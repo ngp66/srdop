@@ -147,6 +147,7 @@ class HTC:
         self.diag_indices_Nk = np.diag_indices(self.Nk)
         
     def get_rates(self, params):
+        '''Creates dictionary RATES with dissipative parameters'''
         rates = {}
         for name, val in params.items():
             if 'Gam' or 'gam' in name:
@@ -158,6 +159,9 @@ class HTC:
         return rates
 
     def get_modes(self):
+        '''Creates lists of wavenumbers [-K0,K0] and [-k0,k0]. Note capitalised K0 denotes unitless integers here after, 
+        while k0 stands for wavenumber values in inverse microns'''
+        
         Qs = np.array([Q for Q in self.get_Q_range()])
         return Qs, (2*np.pi/self.params['L']) * Qs # integers, inverse microns
 
@@ -174,6 +178,7 @@ class HTC:
         return range(min_Q+shift, max_Q+1+shift)
 
     def make_state_dic(self):
+        '''Creates dictionary for the state parameters and a slicing list for further reshaping procedures (see self.split_reshape_return)'''
         Nk, Nnu = self.Nk, self.Nnu
         slices = {}
         names = ['a', 'lp', 'l0']
