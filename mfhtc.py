@@ -206,7 +206,7 @@ class HTC:
             logger.info('...done ({:.2f}s)'.format(time()-t0))
         return ret
 
-    def make_coeffs(self):
+    def make_coeffs(self, S = None, Gam_z = None):
         '''Dictionary for equation coefficients and constants used in their construction.'''
         coeffs, consts = {}, {}
         gp = self.gp
@@ -218,17 +218,20 @@ class HTC:
         sm, sp, sz, si = Pauli.m, Pauli.p, Pauli.z, Pauli.i
         exciton = params['exciton']
         photon = params['photon']
+        if S == None:
+            S = params['S']
+        if Gam_z == None:
+            Gam_z = rates['Gam_z']
         A = 0.5*params['epsilon']*np.kron(sz, bi) +\
                 params['omega_nu']*np.kron(si, bn) +\
-                params['omega_nu']*np.sqrt(params['S'])*np.kron(sz, b+bd) + 0j
+                params['omega_nu']*np.sqrt(S)*np.kron(sz, b+bd) + 0j
         kba = False
         if not kba:
             A += 0.25 * (-1j * rates['gam_delta']) * np.kron(si, (bd @ bd - b @ b))
         B = params['gSqrtN'] * np.kron(sp, bi)
-        C1 = np.sqrt(rates['Gam_z']) * np.kron(sz, bi)
+        C1 = np.sqrt(Gam_z) * np.kron(sz, bi)
         if kba:
             sz2 = np.kron(sz, bi)
-            S = params['S']
             C2 = np.sqrt(rates['gam_up']) * (np.kron(si, bd) - np.sqrt(S) * sz2)
             C3 = np.sqrt(rates['gam_down']) * (np.kron(si, b) - np.sqrt(S) * sz2)
         else:
@@ -1050,7 +1053,7 @@ class HTC:
         """Evolves self.initial_state() from time ti = 0.0 to time tf in time steps self.dt. Calculates 
            diagonal elements of populations for each time step in either real or k space.
         
-        Inputs:  tf [float] - integration time in seconds
+        Inputs:  tf [float] - integration time in physical units
                  kspace [bool] - if True, calculate observables in k space. If False, calculate in real space
                  Note that sigsig_arr always returned in k space
                  K0 [float] - central wavenumber of the initial population [unitless; k0 = K0*L/(2pi)]
@@ -1074,7 +1077,7 @@ class HTC:
         """Plots selected time snapshots of the evolution of the lower polariton population as a waterfall plot in real space.
 
         Inputs:  savefig [bool] - if True, saves plot as 'plot_waterfall.jpg'
-                 tf [float] - final time for the evolution of the wavepacket in seconds (transformation to 
+                 tf [float] - final time for the evolution of the wavepacket in physical units (transformation to 
                  femtoseconds performed internally by code)
                  legend [bool] - if True, include legend with times of the time snapshots
                  step [float] - time step that defines array of snapshot times. Although full evolution is calculated,
@@ -1111,6 +1114,7 @@ class HTC:
             ax.legend()
         if savefig:
             plt.savefig(fname = 'plot_waterfall_n_L.jpg', format = 'jpg')
+        plt.show()
 
     def butter_lowpass_filter(self, data, cutoff, fs, order=5, axis=-1):
         data = np.array(data)
@@ -1125,7 +1129,7 @@ class HTC:
         """Plots displacement and velocity of peak of lower polariton population.
         
         Inputs:  savefig [bool] - if True, saves plots as 'state_i.jpg' and 'velocity_of_peak.jpg' 
-                 tf [float] - integration time in seconds (conversion to femtoseconds performed internally)
+                 tf [float] - integration time in physical units (conversion to femtoseconds performed internally)
                  kspace [bool] - if True, time snapshots plotted over the array of K-values self.Ks. If False, plot in real space
                  K0 [float] - central wavenumber of the initial population [unitless; k0 = K0*L/(2pi)]
         Outputs: r_of_nmax [array of floats] - locations of the peak at each integration time
@@ -1198,14 +1202,14 @@ class HTC:
         fig.suptitle('Position and Velocity of MD of Lower Polariton Distrubution', fontsize=16)
         if savefig:
             plt.savefig(fname = filename, format = 'jpg')
-
+        plt.show()
         return p_weight, e_weight, avg_v, fit_v_of_msd[30], popt[1]
 
     def plot_v_wrt_k(self, K0s, tf = 100.0, npgradient = False):
         """Calculates and plots the velocity of the mean position of the wavepacket by estimating the gradient of its trajectory
            through fitting a curve to it and/or by using np.gradient().
            Inputs:  K0s [float] - array of central wavenumbers of the initial population [unitless; k0s = K0s*L/(2pi)] 
-                    tf [float] - integration time in seconds (conversion to femtoseconds performed internally)
+                    tf [float] - integration time in physical units (conversion to femtoseconds performed internally)
                     npgradient [bool] - if True, plot velocity both as the derivative of a fit to the trajectory
                     and as a direct np.gradient. Note that the np.gradient routine might result in a more jittery pattern.
            Outputs: p_weights, e_weights, vvals, vvalsnp, p0s [floats] - respectively, arrays of polariton and exciton 
@@ -1257,9 +1261,130 @@ class HTC:
         ax1.legend()
         ax1.set_title(f'Polariton Group Velocities (S = {S})')
         plt.savefig(fname = 'velocities_curvefit_dephasing.jpg', format = 'jpg')
-        
+        plt.show()        
         return p_weights, e_weights, vvals, vvalsnp, p0s
 
+    def plot_wrt_S(self, Svals = np.arange(0,10,0.5), Gam_z = np.arange(0,0.01,0.001), tf = 1.1, savefig = False, all_plots = False):
+        """Calculates and plots the velocity of the mean position of the wavepacket for different values SVALS of the Huang-Rhys parameter
+           S and the dephasing constant GAM_Z.
+           Inputs:  Svals [float] - array of Huang-Rhys parameter values 
+                    tf [float] - integration time in physical units (conversion to femtoseconds performed internally)
+                    Gam_z [float] - array of dephasing constant values
+                    savefig [bool] - if True, the final plot of v wrt Svals and Gam_z is stored under the name 'plot_v_as_function_of_S_Gam_z.jpg'
+                    all_plots [bool] - if True, plots of the trajectory and the velocity estimate of the wavepacket are produced for each S and Gamma_z
+           Outputs: p_weights, e_weights, vvals, vvalsnp, p0s [floats] - respectively, arrays of polariton and exciton 
+                    concentrations, wavepacket velocities extracted through curve fitting and np.gradient routines 
+                    and powers of the curve fit [used to estimate whether transport is diffusive/ballistic]
+        """
+        avg_vs = np.ones_like(Svals, dtype = float)
+        fit_v_of_msd = np.ones_like(Svals, dtype = float)
+        fig, ax = plt.subplots(1,2,figsize = (9,4.5), layout = 'tight')
+        K0 = self.params['K_0']
+        
+        for s in Svals:
+            self.make_coeffs(S = s, Gam_z = np.array([0.0]))
+            k_index = np.where(self.Ks == K0) 
+            p_weight = (np.fft.fftshift(self.coeffs['X_k'])[k_index])**2
+            e_weight = (np.fft.fftshift(self.coeffs['Y_k'])[k_index])**2
+            v_c, v_L, v_U = self.group_velocity_expected(Ks_auto = False, all_Ks = np.array([K0]))
+            print('S = ', s)
+            
+            times, n_arr= self.calculate_evolved_n_L_all_k(tf, kspace = False, K0val = K0)
+            times *= self.EV_TO_FS # rescale for plotting
+            n_0 = n_arr[0,:]
+            msd_val = np.average(self.params['delta_r']*self.Ks, weights=n_0) # position of weighted mean (i.e ~ position of peak)
+            msd_arr = np.array([msd_val])
+            for i in range(1, len(times)):
+                n_i = n_arr[i,:]
+                msd_val = np.average(self.params['delta_r']*self.Ks, weights=n_i) # weighted mean
+                msd_arr = np.append(msd_arr, msd_val)
+        
+            def f(t, D, po):
+                return D * t**po + msd_arr[0]
+
+            def v(t, D, po):
+                return D * po * t**(po-1)
+                    
+            popt, pcov = curve_fit(f, times, msd_arr, bounds=([0,1], [np.inf, np.inf])) # [0,1], [np.inf, np.inf]
+            fit_data = f(times, popt[0], popt[1])
+            fit_v_of_msd[np.where(Svals==s)] *= v(times, popt[0], popt[1])[int(np.round(len(times)/2))]
+    
+            dt = times[1] - times[0]
+            v_of_msd = np.gradient(msd_arr, dt)
+            avg_v = np.mean(v_of_msd)
+            avg_vs[np.where(Svals==s)] *= avg_v 
+
+            if all_plots:
+                fig1, ax1 = plt.subplots(1,2,figsize = (9,4), layout = 'tight')
+                ax1[0].plot(times, msd_arr, label = 'data') 
+                ax1[0].plot(times, fit_data, label = 'fit', ls = '--') 
+                ax1[0].set_xlabel('time [$fs$]', fontsize=14)
+                ax1[0].set_ylabel('md [$\mu m$]', fontsize=14)
+                ax1[1].plot(times[1:], v(times, popt[0], popt[1])[1:], label = 'curve_fit', marker = '.') # start at second entry to avoid v set to 0 at t = 0.0      
+        ax[0].plot(Svals, fit_v_of_msd/v_L, marker = '.', ls = '--', color = 'blue')      
+        ax[0].set_xlabel('$S$', fontsize=14)
+        print(fit_v_of_msd)     
+
+        avg_vs = np.ones_like(Gam_z, dtype = float)
+        fit_v_of_msd = np.ones_like(Gam_z, dtype = float)
+        
+        for Gz in Gam_z:
+            self.make_coeffs(S = np.array([0.0]), Gam_z = Gz)
+            k_index = np.where(self.Ks == K0)
+            p_weight = (np.fft.fftshift(self.coeffs['X_k'])[k_index])**2
+            e_weight = (np.fft.fftshift(self.coeffs['Y_k'])[k_index])**2
+            v_c, v_L, v_U = self.group_velocity_expected(Ks_auto = False, all_Ks = np.array([K0]))
+            print('Gam_z = ', Gz)
+            
+            times, n_arr= self.calculate_evolved_n_L_all_k(tf, kspace = False, K0val = K0)
+            times *= self.EV_TO_FS # rescale for plotting
+            n_0 = n_arr[0,:]
+            msd_val = np.average(self.params['delta_r']*self.Ks, weights=n_0) # position of weighted mean (i.e ~ position of peak)
+            msd_arr = np.array([msd_val])
+            for i in range(1, len(times)):
+                n_i = n_arr[i,:]
+                msd_val = np.average(self.params['delta_r']*self.Ks, weights=n_i) # weighted mean
+                msd_arr = np.append(msd_arr, msd_val)
+        
+            def f(t, D, po):
+                return D * t**po + msd_arr[0]
+
+            def v(t, D, po):
+                return D * po * t**(po-1)
+                    
+            popt, pcov = curve_fit(f, times, msd_arr, bounds=([0,1], [np.inf, np.inf])) 
+            fit_data = f(times, popt[0], popt[1])
+            fit_v_of_msd[np.where(Gam_z==Gz)] *= v(times, popt[0], popt[1])[int(np.round(len(times)/2))]
+
+            dt = times[1] - times[0]
+            v_of_msd = np.gradient(msd_arr, dt)
+            avg_v = np.mean(v_of_msd)
+            avg_vs[np.where(Gam_z==Gz)] *= avg_v 
+
+            if all_plots:
+                fig2, ax2 = plt.subplots(1,2,figsize = (9,4), layout = 'tight')
+                ax2[0].plot(times, msd_arr, label = 'data') 
+                ax2[0].plot(times, fit_data, label = 'fit', ls = '--') 
+                ax2[0].set_xlabel('time [$fs$]', fontsize=14)
+                ax2[0].set_ylabel('md [$\mu m$]', fontsize=14)
+                ax2[1].plot(times[1:], v(times, popt[0], popt[1])[1:], label = 'curve_fit', marker = '.') # start at second entry to avoid v set to 0 at t = 0.0      
+            
+        ax[1].plot(Gam_z, fit_v_of_msd/v_L, marker = '.', ls = '--', color = 'blue')  
+        ax[1].set_xlabel('$\Gamma_z$', fontsize=14)
+
+        for i in range(2):
+            ax[i].minorticks_on()
+            ax[i].tick_params(axis="both", direction="in", which="both", right=True, top=True, labelsize=13)
+            for axis in ['top','bottom','left','right']:
+                ax[i].spines[axis].set_linewidth(1.3)
+                ax[i].grid(alpha = 0.2)
+
+            ax[i].set_title('$v_{obs}/v_{k0}^{L}$', fontsize=16)
+
+        if savefig:
+            plt.savefig(fname = 'plot_v_as_function_of_S_Gam_z.jpg', format = 'jpg')
+        plt.show()
+        
 if __name__ == '__main__':
     logging.basicConfig(
         format='%(filename)s L%(lineno)s %(asctime)s %(levelname)s: %(message)s',
