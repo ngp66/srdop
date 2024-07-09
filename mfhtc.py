@@ -1261,16 +1261,31 @@ class HTC:
 
         if npgradient:
             fig, ax = plt.subplots(1,1,figsize = (6,4.5), layout = 'tight')
-            ax.plot(p_weights, 1000*v_L, marker = '.', label = '$v_{k0}^L$', ls = '--', color = 'black')
-            ax.plot(p_weights, 1000*vvalsnp, marker = '.', label = '$v_{obs}$', ls = '--', color = 'blue')
-            ax.set_xlabel('$X_k^2$')
-            ax.set_ylabel('$v_{obs} [\mu m$ $ps^{-1}]$')
+            if relative:
+                if concentrations:
+                    ax.plot(p_weights, vvals/v_L, marker = '.', ls = '--', color = 'blue')
+                    ax.set_xlabel('$X_k^2$')
+                    ax.set_ylabel('$v_{obs}$/$v_{k0}^{L}$')
+                else:
+                    ax.plot(K0s, vvals/v_L, marker = '.', ls = '--', color = 'blue')
+                    ax.set_xlabel('$K_0$')
+                    ax.set_ylabel('$v_{obs}$/$v_{k0}^{L}$')
+            else:
+                if concentrations:
+                    ax.plot(p_weights, 1000.0*v_L, marker = '.', label = '$v_{k0}^L$', ls = '--', color = 'black')
+                    ax.plot(p_weights, 1000.0*vvals, marker = '.', label = '$v_{obs}$', ls = '--', color = 'blue')
+                    ax.set_xlabel('$X_k^2$')
+                else:
+                    ax.plot(K0s, 1000.0*v_L, marker = '.', label = '$v_{k0}^L$', ls = '--', color = 'black')
+                    ax.plot(K0s, 1000.0*vvals, marker = '.', label = '$v_{obs}$', ls = '--', color = 'blue')
+                    ax.set_xlabel('$K_0$')                
+                ax.set_ylabel('$v_{obs} [\mu m$ $ps^{-1}]$')
+                ax.legend()
             ax.minorticks_on()
             ax.tick_params(axis="both", direction="in", which="both", right=True, top=True, labelsize=13)
             for axis in ['top','bottom','left','right']:
                 ax.spines[axis].set_linewidth(1.3)
             ax.grid(alpha = 0.2)
-            ax.legend()
             ax.set_title(f'Lower polariton group velocities (S = {S}, Gz = {Gz})')
             plt.savefig(fname = f'velocities_np_gradient_S_{S}_Gz_{Gz}.jpg', format = 'jpg')
 
@@ -1286,12 +1301,12 @@ class HTC:
                 ax1.set_ylabel('$v_{obs}$/$v_{k0}^{L}$')
         else:
             if concentrations:
-                ax1.plot(p_weights, 1000*v_L, marker = '.', label = '$v_{k0}^L$', ls = '--', color = 'black')
-                ax1.plot(p_weights, 1000*vvals, marker = '.', label = '$v_{obs}$', ls = '--', color = 'blue')
+                ax1.plot(p_weights, 1000.0*v_L, marker = '.', label = '$v_{k0}^L$', ls = '--', color = 'black')
+                ax1.plot(p_weights, 1000.0*vvals, marker = '.', label = '$v_{obs}$', ls = '--', color = 'blue')
                 ax1.set_xlabel('$X_k^2$')
             else:
-                ax1.plot(K0s, 1000*v_L, marker = '.', label = '$v_{k0}^L$', ls = '--', color = 'black')
-                ax1.plot(K0s, 1000*vvals, marker = '.', label = '$v_{obs}$', ls = '--', color = 'blue')
+                ax1.plot(K0s, 1000.0*v_L, marker = '.', label = '$v_{k0}^L$', ls = '--', color = 'black')
+                ax1.plot(K0s, 1000.0*vvals, marker = '.', label = '$v_{obs}$', ls = '--', color = 'blue')
                 ax1.set_xlabel('$K_0$')                
             ax1.set_ylabel('$v_{obs} [\mu m$ $ps^{-1}]$')
             ax1.legend()
