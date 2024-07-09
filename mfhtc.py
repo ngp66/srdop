@@ -880,6 +880,29 @@ class HTC:
             plt.savefig(fname = 'plot_waterfall.jpg', format = 'jpg')
         plt.show()
 
+    def plot_total_population_growth(self, tf = 100.0, K0val = 50.0, savefig = False):
+        times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables_all_k(tf, kspace = False, K0val = K0val)
+        times *= self.EV_TO_FS # convert to femtoseconds for plotting
+        fig, ax = plt.subplots(1,1,figsize=(10,6), layout = 'tight')
+
+        n_Bs = np.ones_like(times)
+        n_Ds = np.ones_like(times)
+        for i in range(len(times)):
+            n_Bs[i] = n_Bs[i]*np.sum(n_B_arr[i,:])
+            n_Ds[i] = n_Ds[i]*np.sum(n_D_arr[i,:])
+        ax.plot(times, n_Bs, color = 'black', label = 'n_B', marker = '.', ls = '--')
+        ax.plot(times, n_Ds, color = 'blue', label = 'n_D', marker = '.', ls = '--')
+        ax.set_title('Bright-dark state interconversion')
+        ax.minorticks_on()
+        ax.tick_params(axis="both", direction="in", which="both", right=True, top=True, labelsize=13)
+        for axis in ['top','bottom','left','right']:
+            ax.spines[axis].set_linewidth(1.3)
+        ax.grid(alpha = 0.2)   
+        ax.legend()
+        if savefig:
+            plt.savefig(fname = 'dark_state_growth_rate.jpg', format = 'jpg')
+        plt.show()
+        
     def plot_n_D_fixed_k(self, savefig = False, tfs = np.array([10.1]), K0vals = np.array([50.0])):
         """Plots selected time snapshot of the evolution of either the lower polariton, the bright or the photon population as a waterfall plot.
 
@@ -1159,17 +1182,14 @@ class HTC:
         k_index = np.where(self.Ks == K0) #self.params['K_0'])
         p_weight = (np.fft.fftshift(self.coeffs['X_k'])[k_index])**2
         e_weight = (np.fft.fftshift(self.coeffs['Y_k'])[k_index])**2
-        
         print('Photonic weight, X_k^2 =', p_weight, 'Molecular weight, Y_k^2 =', e_weight)
-
         if plot_hopfield:
             fig1, ax1 = plt.subplots(1,1,figsize = (2,2))
             ax1.plot(self.ks, np.fft.fftshift(self.coeffs['X_k']), label = 'X_k')
             ax1.plot(self.ks, np.fft.fftshift(self.coeffs['Y_k']), label = 'Y_k')
             ax1.set_title('Hopfield coefficients')
             ax1.set_xlabel('k [$\mu m$]')
-            ax1.legend()
-            
+            ax1.legend()    
         times, n_arr= self.calculate_evolved_n_L_all_k(tf, kspace = False, K0val = K0)
         times *= self.EV_TO_FS # rescale for plotting
         n_0 = n_arr[0,:]
@@ -1182,7 +1202,6 @@ class HTC:
         
         def f(t, D, po):
             return D * t**po + msd_arr[0]
-
         def v(t, D, po):
             return D * po * t**(po-1)
                     
@@ -1197,7 +1216,6 @@ class HTC:
             ax[0].plot(times, fit_data, label = 'fit', ls = '--', color = 'blue') 
             ax[0].set_xlabel('time [$fs$]', fontsize=14)
             ax[0].set_ylabel('md [$\mu m$]', fontsize=14)
-        
             if npgradient:
                 dt = times[1] - times[0]
                 v_of_msd = np.gradient(msd_arr, dt)
@@ -1212,7 +1230,6 @@ class HTC:
                 ax[1].plot(times[1:], fit_v_of_msd[1:], label = 'curve_fit', color = 'blue') # start at second entry to avoid v set to 0 at t = 0.0      
             ax[1].set_xlabel('time [$fs$]', fontsize=14)
             ax[1].set_ylabel('$v_{md}$ [$\mu m$ $fs^{-1}$]', fontsize=14)
-
             for i in range(2):
                 ax[i].minorticks_on()
                 ax[i].tick_params(axis="both", direction="in", which="both", right=True, top=True, labelsize=13)
@@ -1220,7 +1237,6 @@ class HTC:
                     ax[i].spines[axis].set_linewidth(1.3)
                 ax[i].grid(alpha = 0.2)
                 ax[i].legend()    
-
             fig.suptitle('Position and speed of MD of lower polariton distrubution', fontsize=16)
             if savefig:
                 plt.savefig(fname = filename, format = 'jpg')
@@ -1468,6 +1484,6 @@ if __name__ == '__main__':
     #htc.plot_evolution(tf = 100.1, savefig = True, fixed_position_index = 16, kspace = False)
     #htc.plot_initial_populations(kspace = False)
     #htc.plot_waterfall(n_L = True, tf = 100, step = 10, kspace = False, legend = True)
-    #htc.plot_waterfall_n_k(savefig = True, tf = 35, step = 15, legend = True, K0val = 80.0)
-    htc.plot_n_D_fixed_k(savefig = True, tfs = np.array([20.1]), K0vals = np.arange(0,120.1,5))
-    htc.plot_wrt_S(Svals = np.arange(0.0,1.1,1.0), Gam_z = np.arange(0,0.04,0.0051), tf = 20.1, all_plots = True)
+    #htc.plot_n_D_fixed_k(savefig = True, tfs = np.array([20.1]), K0vals = np.arange(0,120.1,5))
+    #htc.plot_wrt_S(Svals = np.arange(0.0,1.1,1.0), Gam_z = np.arange(0,0.04,0.0051), tf = 20.1, all_plots = True)
+    htc.plot_total_population_growth(tf = 10.1, K0val = 80.0, savefig = True)
