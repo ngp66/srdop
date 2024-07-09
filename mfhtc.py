@@ -778,6 +778,7 @@ class HTC:
         ax.legend()
         if savefig:
             plt.savefig(fname = 'dispersion.jpg', format = 'jpg')
+        plt.show()
         
     def plot_evolution(self, savefig = False, tf = 1.0, fixed_position_index = 6, kspace = False):
         """Plots evolution of photonic, bright and dark state populations over time TF at given position FIXED_POSITION_INDEX.
@@ -802,6 +803,7 @@ class HTC:
         ax.set_title('Photonic and Excitonic Population Evolution over Time')
         if savefig:
             plt.savefig(fname = 'evolution.jpg', format = 'jpg')
+        plt.show()
             
     def plot_waterfall(self, n_L = False, n_B = False, n_D = False, n_k = False, savefig = False, tf = 101.1, kspace = False, legend = False, step = 100, K0vals = np.array([50.0])):
         """Plots selected time snapshot of the evolution of either the lower polariton, the bright or the photon population as a waterfall plot.
@@ -857,7 +859,6 @@ class HTC:
                         ax.plot(self.Ks*self.params['delta_r']+np.max(self.Ks)*K0_ind, n_i + i * offset, zorder = (len(slices)-i), color=colors[i])
                     else:
                         ax.plot(self.Ks*self.params['delta_r']+np.max(self.Ks)*K0_ind, n_i + i * offset, label = f't = {slices[i]:.2E}', zorder = (len(slices)-i), color=colors[i])
-
         if kspace:
             ax.set_xlabel('$k [\mu m^{-1}]$')
         else:
@@ -872,6 +873,7 @@ class HTC:
             ax.legend()
         if savefig:
             plt.savefig(fname = 'plot_waterfall.jpg', format = 'jpg')
+        plt.show()
 
     def plot_n_D_fixed_k(self, savefig = False, tfs = np.array([10.1]), K0vals = np.array([50.0])):
         """Plots selected time snapshot of the evolution of either the lower polariton, the bright or the photon population as a waterfall plot.
@@ -912,7 +914,8 @@ class HTC:
         ax.legend()
         if savefig:
             plt.savefig(fname = 'dark_state_wrt_k.jpg', format = 'jpg')
-    
+        plt.show()
+        
     def plot_initial_populations(self, savefig = False, kspace = False, K0val = 40.0):
         """Plots upper, lower polariton and photonic populations on one figure in either k space or real space. 
            Plots molecular, bright and dark populations in real space on another figure.
@@ -968,6 +971,7 @@ class HTC:
         fig2.tight_layout(h_pad=0.2)
         if savefig:
             plt.savefig(fname = 'brightdark_populations.jpg', format = 'jpg')
+        plt.show()
 
     def julia_comparison(julia_fp=None):
         params = {'Q0':0,
@@ -1013,6 +1017,7 @@ class HTC:
         ax.set_title(r'$g\sqrt{{N_m}}={gSqrtN},\ \Gamma_z={Gam_z}$'.format(**params))
         ax.legend()
         fig.savefig('figures/julia_comparison.png', dpi=350, bbox_inches='tight')
+        plt.show()
 
     ################################# Lighter functions for calculating working only with n_L populations #################################
     def calculate_n_L(self, state, kspace = True):
@@ -1203,7 +1208,7 @@ class HTC:
         if savefig:
             plt.savefig(fname = filename, format = 'jpg')
         plt.show()
-        return p_weight, e_weight, avg_v, fit_v_of_msd[30], popt[1]
+        return p_weight, e_weight, avg_v, fit_v_of_msd[int(np.round(len(times)/2))], popt[1]
 
     def plot_v_wrt_k(self, K0s, tf = 100.0, npgradient = False):
         """Calculates and plots the velocity of the mean position of the wavepacket by estimating the gradient of its trajectory
@@ -1265,7 +1270,7 @@ class HTC:
         return p_weights, e_weights, vvals, vvalsnp, p0s
 
     def plot_wrt_S(self, Svals = np.arange(0,10,0.5), Gam_z = np.arange(0,0.01,0.001), tf = 1.1, savefig = False, all_plots = False):
-        """Calculates and plots the velocity of the mean position of the wavepacket for different values SVALS of the Huang-Rhys parameter
+        """Calculates and plots the velocity of the mean position of the lower polariton population for different values SVALS of the Huang-Rhys parameter
            S and the dephasing constant GAM_Z.
            Inputs:  Svals [float] - array of Huang-Rhys parameter values 
                     tf [float] - integration time in physical units (conversion to femtoseconds performed internally)
@@ -1280,16 +1285,19 @@ class HTC:
         fit_v_of_msd = np.ones_like(Svals, dtype = float)
         fig, ax = plt.subplots(1,2,figsize = (9,4.5), layout = 'tight')
         K0 = self.params['K_0']
-        
+        v_c, v_L, v_U = self.group_velocity_expected(Ks_auto = False, all_Ks = np.array([K0]))
+        def f(t, D, po):
+            return D * t**po + msd_arr[0]
+
+        def v(t, D, po):
+            return D * po * t**(po-1)
         for s in Svals:
             self.make_coeffs(S = s, Gam_z = np.array([0.0]))
             k_index = np.where(self.Ks == K0) 
             p_weight = (np.fft.fftshift(self.coeffs['X_k'])[k_index])**2
             e_weight = (np.fft.fftshift(self.coeffs['Y_k'])[k_index])**2
-            v_c, v_L, v_U = self.group_velocity_expected(Ks_auto = False, all_Ks = np.array([K0]))
             print('S = ', s)
-            
-            times, n_arr= self.calculate_evolved_n_L_all_k(tf, kspace = False, K0val = K0)
+            times, n_arr= self.calculate_evolved_n_L_all_k(tf, kspace = False, K0val = K0) #different values for each s
             times *= self.EV_TO_FS # rescale for plotting
             n_0 = n_arr[0,:]
             msd_val = np.average(self.params['delta_r']*self.Ks, weights=n_0) # position of weighted mean (i.e ~ position of peak)
@@ -1298,14 +1306,8 @@ class HTC:
                 n_i = n_arr[i,:]
                 msd_val = np.average(self.params['delta_r']*self.Ks, weights=n_i) # weighted mean
                 msd_arr = np.append(msd_arr, msd_val)
-        
-            def f(t, D, po):
-                return D * t**po + msd_arr[0]
-
-            def v(t, D, po):
-                return D * po * t**(po-1)
                     
-            popt, pcov = curve_fit(f, times, msd_arr, bounds=([0,1], [np.inf, np.inf])) # [0,1], [np.inf, np.inf]
+            popt, pcov = curve_fit(f, times, msd_arr, bounds=([0,1], [np.inf, np.inf])) 
             fit_data = f(times, popt[0], popt[1])
             fit_v_of_msd[np.where(Svals==s)] *= v(times, popt[0], popt[1])[int(np.round(len(times)/2))]
     
@@ -1324,7 +1326,6 @@ class HTC:
         ax[0].plot(Svals, fit_v_of_msd/v_L, marker = '.', ls = '--', color = 'blue')      
         ax[0].set_xlabel('$S$', fontsize=14)
         print(fit_v_of_msd)     
-
         avg_vs = np.ones_like(Gam_z, dtype = float)
         fit_v_of_msd = np.ones_like(Gam_z, dtype = float)
         
@@ -1333,10 +1334,8 @@ class HTC:
             k_index = np.where(self.Ks == K0)
             p_weight = (np.fft.fftshift(self.coeffs['X_k'])[k_index])**2
             e_weight = (np.fft.fftshift(self.coeffs['Y_k'])[k_index])**2
-            v_c, v_L, v_U = self.group_velocity_expected(Ks_auto = False, all_Ks = np.array([K0]))
             print('Gam_z = ', Gz)
-            
-            times, n_arr= self.calculate_evolved_n_L_all_k(tf, kspace = False, K0val = K0)
+            times, n_arr= self.calculate_evolved_n_L_all_k(tf, kspace = False, K0val = K0) # different values for each Gz
             times *= self.EV_TO_FS # rescale for plotting
             n_0 = n_arr[0,:]
             msd_val = np.average(self.params['delta_r']*self.Ks, weights=n_0) # position of weighted mean (i.e ~ position of peak)
@@ -1345,30 +1344,21 @@ class HTC:
                 n_i = n_arr[i,:]
                 msd_val = np.average(self.params['delta_r']*self.Ks, weights=n_i) # weighted mean
                 msd_arr = np.append(msd_arr, msd_val)
-        
-            def f(t, D, po):
-                return D * t**po + msd_arr[0]
-
-            def v(t, D, po):
-                return D * po * t**(po-1)
                     
             popt, pcov = curve_fit(f, times, msd_arr, bounds=([0,1], [np.inf, np.inf])) 
             fit_data = f(times, popt[0], popt[1])
             fit_v_of_msd[np.where(Gam_z==Gz)] *= v(times, popt[0], popt[1])[int(np.round(len(times)/2))]
-
             dt = times[1] - times[0]
             v_of_msd = np.gradient(msd_arr, dt)
             avg_v = np.mean(v_of_msd)
             avg_vs[np.where(Gam_z==Gz)] *= avg_v 
-
             if all_plots:
                 fig2, ax2 = plt.subplots(1,2,figsize = (9,4), layout = 'tight')
                 ax2[0].plot(times, msd_arr, label = 'data') 
                 ax2[0].plot(times, fit_data, label = 'fit', ls = '--') 
                 ax2[0].set_xlabel('time [$fs$]', fontsize=14)
                 ax2[0].set_ylabel('md [$\mu m$]', fontsize=14)
-                ax2[1].plot(times[1:], v(times, popt[0], popt[1])[1:], label = 'curve_fit', marker = '.') # start at second entry to avoid v set to 0 at t = 0.0      
-            
+                ax2[1].plot(times[1:], v(times, popt[0], popt[1])[1:], label = 'curve_fit', marker = '.') # start at second entry to avoid v set to 0 at t = 0.0          
         ax[1].plot(Gam_z, fit_v_of_msd/v_L, marker = '.', ls = '--', color = 'blue')  
         ax[1].set_xlabel('$\Gamma_z$', fontsize=14)
 
@@ -1378,9 +1368,7 @@ class HTC:
             for axis in ['top','bottom','left','right']:
                 ax[i].spines[axis].set_linewidth(1.3)
                 ax[i].grid(alpha = 0.2)
-
             ax[i].set_title('$v_{obs}/v_{k0}^{L}$', fontsize=16)
-
         if savefig:
             plt.savefig(fname = 'plot_v_as_function_of_S_Gam_z.jpg', format = 'jpg')
         plt.show()
@@ -1426,3 +1414,4 @@ if __name__ == '__main__':
     #htc.plot_waterfall(n_L = True, tf = 100, step = 10, kspace = False, legend = True)
     #htc.plot_waterfall_n_k(savefig = True, tf = 35, step = 15, legend = True, K0val = 80.0)
     htc.plot_n_D_fixed_k(savefig = True, tfs = np.array([20.1]), K0vals = np.arange(0,120.1,5))
+    htc.plot_wrt_S(Svals = np.arange(0.0,1.1,1.0), Gam_z = np.arange(0,0.04,0.0051), tf = 20.1, all_plots = True)
