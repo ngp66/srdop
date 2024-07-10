@@ -705,7 +705,7 @@ class HTC:
         assert len(n_D_arr) == len(t_fs), 'Length of evolved dark exciton population array does not have the required dimensions'
         return t_fs, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr, asig_r_diag 
 
-    def calculate_evolved_observables_all_k(self, tf = 100.0, kspace = False, K0val = 50.0):
+    def calculate_evolved_observables_all_k(self, tf = 100.0, kspace = False, K0val = 50.0, plot_all = False, K0s = None):
         """Evolves self.initial_state() from time ti = 0.0 to time tf in time steps self.dt. Calculates 
            diagonal elements of populations for each time step in either real or k space.
         
@@ -713,33 +713,61 @@ class HTC:
                  kspace [bool] - if True, calculate observables in k space. If False, calculate in real space
                  Note that sigsig_arr always returned in k space
                  K0 [float] - central wavenumber of the initial state [unitless; k0 = K0*L/(2pi)]
+                 plot_all [bool] - if True, evolved observables calculated for a range K0s of K_0 values of the initial population
         Outputs: t_fs, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr [arrays of floats]: arrays of 
                  integration times, photon, molecular, bright, dark, lower and upper polariton populations and 
                  coherences <sigma_k(+) sigma_k(-)> respectively for each time step of the evolution"""
         
-        t_fs, y_vals = self.full_integration(tf, ti = 0.0, K0val = K0val)
-        y_vals = y_vals.T
-        n_k_diag0, n_M_diag0, n_L_diag0, n_U_diag0, n_B_diag0, n_D_diag0, sigsig_diag0, asig_r_diag0 = self.calculate_diagonal_elements(y_vals[0,:], kspace) # calculate observables for initial state
-        n_k_arr, n_M_arr, n_L_arr, n_U_arr, n_B_arr, n_D_arr, sigsig_arr, asig_r_arr = [np.zeros((len(t_fs), self.Nk), dtype=float) for _ in range(8)]
-        n_k_arr[0,:] = n_k_diag0
-        n_M_arr[0,:] = n_M_diag0
-        n_L_arr[0,:] = n_L_diag0
-        n_U_arr[0,:] = n_U_diag0
-        n_B_arr[0,:] = n_B_diag0
-        n_D_arr[0,:] = n_D_diag0
-        sigsig_arr[0,:] = sigsig_diag0
-        asig_r_arr[0,:] = asig_r_diag0
-        for i in range(1,len(t_fs)):
-            assert len(y_vals[i,:]) == self.state_length, 'Length of evolved state is incorrect'
-            n_k_diag1, n_M_diag1, n_L_diag1, n_U_diag1, n_B_diag1, n_D_diag1, sigsig_diag1, asig_r_diag1 = self.calculate_diagonal_elements(y_vals[i,:], kspace) # calculate observables for evolved state 
-            n_k_arr[i,:] = n_k_diag1
-            n_M_arr[i,:] = n_M_diag1
-            n_L_arr[i,:] = n_L_diag1
-            n_U_arr[i,:] = n_U_diag1
-            n_B_arr[i,:] = n_B_diag1
-            n_D_arr[i,:] = n_D_diag1
-            sigsig_arr[i,:] = sigsig_diag1
-            asig_r_arr[i,:] = asig_r_diag1
+        if not plot_all:        
+            t_fs, y_vals = self.full_integration(tf, ti = 0.0, K0val = K0val)
+            y_vals = y_vals.T
+            n_k_diag0, n_M_diag0, n_L_diag0, n_U_diag0, n_B_diag0, n_D_diag0, sigsig_diag0, asig_r_diag0 = self.calculate_diagonal_elements(y_vals[0,:], kspace) # calculate observables for initial state
+            n_k_arr, n_M_arr, n_L_arr, n_U_arr, n_B_arr, n_D_arr, sigsig_arr, asig_r_arr = [np.zeros((len(t_fs), self.Nk), dtype=float) for _ in range(8)]
+            n_k_arr[0,:] = n_k_diag0
+            n_M_arr[0,:] = n_M_diag0
+            n_L_arr[0,:] = n_L_diag0
+            n_U_arr[0,:] = n_U_diag0
+            n_B_arr[0,:] = n_B_diag0
+            n_D_arr[0,:] = n_D_diag0
+            sigsig_arr[0,:] = sigsig_diag0
+            asig_r_arr[0,:] = asig_r_diag0
+            for i in range(1,len(t_fs)):
+                assert len(y_vals[i,:]) == self.state_length, 'Length of evolved state is incorrect'
+                n_k_diag1, n_M_diag1, n_L_diag1, n_U_diag1, n_B_diag1, n_D_diag1, sigsig_diag1, asig_r_diag1 = self.calculate_diagonal_elements(y_vals[i,:], kspace) # calculate observables for evolved state 
+                n_k_arr[i,:] = n_k_diag1
+                n_M_arr[i,:] = n_M_diag1
+                n_L_arr[i,:] = n_L_diag1
+                n_U_arr[i,:] = n_U_diag1
+                n_B_arr[i,:] = n_B_diag1
+                n_D_arr[i,:] = n_D_diag1
+                sigsig_arr[i,:] = sigsig_diag1
+                asig_r_arr[i,:] = asig_r_diag1
+        else:
+            for K0val in K0s:
+                ind = np.where(K0s == K0val)
+                t_fs, y_vals = self.full_integration(tf, ti = 0.0, K0val = K0val)
+                y_vals = y_vals.T
+                n_k_diag0, n_M_diag0, n_L_diag0, n_U_diag0, n_B_diag0, n_D_diag0, sigsig_diag0, asig_r_diag0 = self.calculate_diagonal_elements(y_vals[0,:], kspace) # calculate observables for initial state
+                n_k_arr, n_M_arr, n_L_arr, n_U_arr, n_B_arr, n_D_arr, sigsig_arr, asig_r_arr = [np.zeros((len(K0s), len(t_fs), self.Nk), dtype=float) for _ in range(8)]
+                n_k_arr[ind,0,:] = n_k_diag0
+                n_M_arr[ind,0,:] = n_M_diag0
+                n_L_arr[ind,0,:] = n_L_diag0
+                n_U_arr[ind,0,:] = n_U_diag0
+                n_B_arr[ind,0,:] = n_B_diag0
+                n_D_arr[ind,0,:] = n_D_diag0
+                sigsig_arr[ind,0,:] = sigsig_diag0
+                asig_r_arr[ind,0,:] = asig_r_diag0
+                for i in range(1,len(t_fs)):
+                    assert len(y_vals[i,:]) == self.state_length, 'Length of evolved state is incorrect'
+                    n_k_diag1, n_M_diag1, n_L_diag1, n_U_diag1, n_B_diag1, n_D_diag1, sigsig_diag1, asig_r_diag1 = self.calculate_diagonal_elements(y_vals[i,:], kspace) # calculate observables for evolved state 
+                    n_k_arr[ind,i,:] = n_k_diag1
+                    n_M_arr[ind,i,:] = n_M_diag1
+                    n_L_arr[ind,i,:] = n_L_diag1
+                    n_U_arr[ind,i,:] = n_U_diag1
+                    n_B_arr[ind,i,:] = n_B_diag1
+                    n_D_arr[ind,i,:] = n_D_diag1
+                    sigsig_arr[ind,i,:] = sigsig_diag1
+                    asig_r_arr[ind,i,:] = asig_r_diag1            
         return t_fs, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr, asig_r_arr
         
     def cavity_velocity(self, K):
@@ -787,16 +815,20 @@ class HTC:
         K0val = self.params['K_0']
         self.plot_group_velocities(savefig = savefigs)
         self.plot_wrt_S(Svals = np.arange(0.0,10.1,1.0), Gam_z = np.arange(0,0.04,0.002), tf = 20.1, all_plots = False, savefig = savefigs)
-        times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr, asig_r_arr = self.calculate_evolved_observables_all_k(tf, kspace = kspace, K0val = K0val)
+        times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr, asig_r_arr = self.calculate_evolved_observables_all_k(tf, kspace = kspace, K0val = K0val, plot_all = False)
         self.plot_initial_populations(savefig = savefigs, kspace = kspace, K0val = K0val)
         self.plot_msd_motion(times = times, n_arr = n_k_arr, n_k = True, n_L = False, n_B = False, n_D = False, tf = None, K0 = K0val, savefig = True)
         self.plot_msd_motion(times = times, n_arr = n_L_arr, n_k = False, n_L = True, n_B = False, n_D = False, tf = None, K0 = K0val, savefig = True)
         self.plot_msd_motion(times = times, n_arr = n_B_arr, n_k = False, n_L = False, n_B = True, n_D = False, tf = None, K0 = K0val, savefig = True)
         self.plot_msd_motion(times = times, n_arr = n_D_arr, n_k = False, n_L = False, n_B = False, n_D = True, tf = None, K0 = K0val, savefig = True)
-        self.plot_total_population_growth(times = times, n_B_arr = n_B_arr, n_D_arr = n_D_arr, tf = None, K0val = K0val, savefig = savefigs)
+        self.plot_total_dark_population_growth(times = times, n_B_arr = n_B_arr, n_D_arr = n_D_arr, tf = None, K0val = K0val, savefig = savefigs)
         self.plot_photon_exciton_current(times = times, asig_arr = asig_r_arr, tf = None, K0val = K0val, savefig = savefigs)
         if fixed_position_index != None:
             self.plot_evolution(times = times, n_k_arr = n_k_arr[:,fixed_position_index], n_B_arr = n_B_arr[:,fixed_position_index], n_D_arr = n_D_arr[:,fixed_position_index], kspace = False, savefig = False)
+        
+    def plot_all_many_Ks(self, tf, kspace = False, K0s = np.arange(10.0,120.0,10.0), savefigs = False):
+        times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr, asig_r_arr = self.calculate_evolved_observables_all_k(tf, kspace = kspace, K0val = None, K0s = K0s, plot_all = True)
+        self.plot_n_D_wrt_k(times = times, n_D_arr = n_D_arr, tf = None, K0vals = K0s, savefig = savefigs)
             
     def plot_group_velocities(self, savefig = False):
         """Plots cavity velocity and theoretical group velocities of upper and lower polariton as a function of wavenumber K = k*2*pi/L.
@@ -918,7 +950,7 @@ class HTC:
             plt.savefig(fname = 'plot_waterfall.jpg', format = 'jpg')
         plt.show()
 
-    def plot_total_population_growth(self, times = None, n_B_arr = None, n_D_arr = None, tf = None, K0val = 50.0, savefig = False):
+    def plot_total_dark_population_growth(self, times = None, n_B_arr = None, n_D_arr = None, tf = None, K0val = 50.0, savefig = False):
         """Plots photon-exciton current igN_E(<a_m sig_n+> - <a_m+ sig_n->) over time.
 
         Inputs:  times [float] - array of times corresponding to the evolved arrays N_B_ARR and N_D_ARR. If None, then tf 
@@ -1024,7 +1056,7 @@ class HTC:
                  K0val [float] - central wavenumber of the intial population [unitless; k0 = K0*L/(2pi)] 
                  savefig [bool] - if True, saves plot as 'asig_current.jpg'"""
         
-        if tf != None:        
+        if tf != None:
             times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr, asig_arr = self.calculate_evolved_observables_all_k(tf, kspace = False, K0val = K0val)
         times *= self.EV_TO_FS # convert to femtoseconds for plotting
         fig, ax = plt.subplots(1,1,figsize=(10,6), layout = 'tight')
@@ -1047,37 +1079,42 @@ class HTC:
             plt.savefig(fname = f'asig_current_K0_{K0val}.jpg', format = 'jpg')
         plt.show()
         
-    def plot_n_D_wrt_k(self, tfs = np.array([10.1]), K0vals = np.array([50.0]), savefig = False):
+    def plot_n_D_wrt_k(self, times = None, n_D_arr = None, tf = 10.1, K0vals = np.array([50.0]), savefig = False):
         """Plots total dark state population as a function of central wavenumber K0.
 
-        Inputs:  tfs [float] - array of final times for the evolution of the wavepacket in physical units
-                                (transformation to femtoseconds performed internally by code)
+        Inputs:  times [float] - array of times corresponding to the evolved array N_D_ARR. If None, then tf 
+                 must be specified, so that the evolution is calculated manually over time span [0,tf].
+                 n_D_arr [float] - array of photon-exciton current values at times TIMES. 
+                 tf [float] - final time for the evolution of the wavepacket in physical units if 
+                               TIMES, N_D_ARR not specified. Note that tf must be set to NONE if plot_all is used.
+                              (transformation to femtoseconds performed internally by code)
                  K0vals [float] - array of central wavenumbers of the intial population [unitless; k0 = K0*L/(2pi)]
                  savefig [bool] - if True, saves plot as 'dark_state_wrt_k.jpg'"""
         
         fig, ax = plt.subplots(1,1,figsize=(10,6), layout = 'tight')
+        S = self.params['S']
+        Gz = self.params['Gam_z']
+        
+        n_vals = np.ones_like(K0vals, dtype = float)
+        p_weights = np.ones_like(K0vals, dtype = float)
+        if tf != None:
+            times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr, asig_arr = self.calculate_evolved_observables_all_k(tf = tf, kspace = False, K0val = None, plot_all = True, K0s = K0vals)
+        for K0val in K0vals:
+            k_index = np.where(self.Ks == K0val) #self.params['K_0'])
+            p_weight = (np.fft.fftshift(self.coeffs['X_k'])[k_index])**2
+            e_weight = (np.fft.fftshift(self.coeffs['Y_k'])[k_index])**2
+            times *= self.EV_TO_FS # convert to femtoseconds for plotting
+            n_arr = n_D_arr
+            m = np.where(K0vals == K0val)
+            ax.set_ylabel('$n_{D}$')
+            n_i = np.sum(n_arr[m,-1,:]) # last time
+            n_vals[m] *= n_i
+            p_weights[m] *= p_weight
+            print('Current K0val =', m[0])
 
-        colors = plt.cm.coolwarm(np.linspace(0,1,len(tfs)))
-
-        for t in tfs:
-            n_vals = np.ones_like(K0vals, dtype = float)
-            p_weights = np.ones_like(K0vals, dtype = float)
-            for K0val in K0vals:
-                k_index = np.where(self.Ks == K0val) #self.params['K_0'])
-                p_weight = (np.fft.fftshift(self.coeffs['X_k'])[k_index])**2
-                e_weight = (np.fft.fftshift(self.coeffs['Y_k'])[k_index])**2
-                times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr = self.calculate_evolved_observables_all_k(t, kspace = False, K0val = K0val)
-                times *= self.EV_TO_FS # convert to femtoseconds for plotting
-                n_arr = n_D_arr
-                ax.set_ylabel('$n_{D}$')
-                n_i = np.sum(n_arr[-1]) # last time
-                m = np.where(K0vals == K0val)
-                n_vals[m] *= n_i
-                p_weights[m] *= p_weight
-                print('Current K0val =', m[0])
-            ax.plot(p_weights, n_vals, marker = '.', ls = '--', color = colors[np.where(tfs == t)], label = f't = {t:.2E}')
+        ax.plot(p_weights, n_vals, marker = '.', ls = '--', color = 'blue', label = 'n_D')
         ax.set_xlabel('$X_k^2$')
-        ax.set_title(f'Dark state population after {t*self.EV_TO_FS:.2E} fs')
+        ax.set_title(f'Dark state population after {times[-1]:.2E} fs (S = {S}, $\Gamma_z$ = {Gz})')
         ax.minorticks_on()
         ax.tick_params(axis="both", direction="in", which="both", right=True, top=True, labelsize=13)
         for axis in ['top','bottom','left','right']:
@@ -1085,7 +1122,7 @@ class HTC:
         ax.grid(alpha = 0.2)   
         ax.legend()
         if savefig:
-            plt.savefig(fname = 'dark_state_wrt_k.jpg', format = 'jpg')
+            plt.savefig(fname = f'dark_state_wrt_k_S_{S}_Gz_{Gz}.jpg', format = 'jpg')
         plt.show()
         
     def plot_initial_populations(self, savefig = False, kspace = False, K0val = 40.0):
