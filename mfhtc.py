@@ -610,7 +610,7 @@ class HTC:
         if not kspace:
             asig_r1 = fft(asig_k_vals, axis=0, norm = 'ortho') # double fourier transform <a_m sign_n+>
             asig_r = ifft(asig_r1, axis=-1, norm = 'ortho')
-            asig_current = 1j*(self.params['gSqrtN']**2)*(asig_r - np.conj(asig_r))
+            asig_current = 1j*self.NE*(self.params['gSqrtN']**2)*(asig_r - np.conj(asig_r))
             nkft1 = fft(n_k_vals, axis=0, norm = 'ortho') # double fourier transform
             n_k = ifft(nkft1, axis=-1, norm = 'ortho')
             nlft1 = fft(n_L_vals, axis=0, norm = 'ortho') # double fourier transform
@@ -623,7 +623,7 @@ class HTC:
             n_M = sigsig_vals
             nbft1 = ifft(n_B_vals, axis=-1, norm = 'ortho') # double fourier transform
             n_B = fft(nbft1, axis=0, norm = 'ortho')
-            asig_current = 1j*(self.params['gSqrtN']**2)*(asig_k_vals - np.conj(asig_k_vals))
+            asig_current = 1j*self.NE*(self.params['gSqrtN']**2)*(asig_k_vals - np.conj(asig_k_vals))
             n_D = n_M - n_B
         return n_k_vals, n_M, n_L_vals, n_U_vals, sigsig_vals, asig_current, n_B, n_D
         
@@ -678,7 +678,6 @@ class HTC:
         y_vals = y_vals.T
         n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_r_diag = self.calculate_diagonal_elements(y_vals[0,:], kspace) # calculate observables for initial state
         n_k_arr, n_M_arr, n_L_arr, n_U_arr, n_B_arr, n_D_arr, sigsig_arr, asig_r_arr = [np.zeros_like(t_fs, dtype=float) for _ in range(8)]
-        print(asig_r_arr.shape, asig_r_diag.shape)
         n_k_arr[0] = n_k_diag[fixed_position_index]
         n_M_arr[0] = n_M_diag[fixed_position_index]
         n_L_arr[0] = n_L_diag[fixed_position_index]
@@ -826,11 +825,7 @@ class HTC:
         if fixed_position_index != None:
             self.plot_evolution(times = times_arr, n_k_arr = n_k_arr[:,fixed_position_index], n_B_arr = n_B_arr[:,fixed_position_index], n_D_arr = n_D_arr[:,fixed_position_index], kspace = False, savefig = False)
         return times_arr, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr, asig_r_arr
-        
-    def plot_all_many_Ks(self, tf, kspace = False, K0s = np.arange(10.0,120.0,10.0), savefigs = False):
-        times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr, asig_r_arr = self.calculate_evolved_observables_all_k(tf, kspace = kspace, K0val = None, K0s = K0s, plot_all = True)
-        self.plot_n_D_wrt_k(times = times, n_D_arr = n_D_arr, tf = None, K0vals = K0s, concentrations = False, savefig = savefigs)
-            
+                 
     def plot_group_velocities(self, savefig = False):
         """Plots cavity velocity and theoretical group velocities of upper and lower polariton as a function of wavenumber K = k*2*pi/L.
 
@@ -1353,7 +1348,7 @@ class HTC:
             padlen = max(0, data.shape[-1]-2) 
         return filtfilt(b, a, data, axis=axis, padlen=padlen)
     
-    def plot_n_L_peak_velocity(self, savefig = False, filename = 'v_rmsd.jpg', tf = 100, npgradient = True, plot_hopfield = False, suppress_plots = False, K0 = 50.0):
+    def plot_n_L_peak_velocity(self, tf = 1.1, npgradient = True, plot_hopfield = False, suppress_plots = False, K0 = 50.0, savefig = False, filename = 'v_rmsd.jpg'):
         """Plots displacement and velocity of peak of lower polariton population.
         
         Inputs:  savefig [bool] - if True, saves plots as 'filename.jpg'
@@ -1377,6 +1372,7 @@ class HTC:
         k_index = np.where(self.Ks == K0) #self.params['K_0'])
         p_weight = (np.fft.fftshift(self.coeffs['X_k'])[k_index])**2
         e_weight = (np.fft.fftshift(self.coeffs['Y_k'])[k_index])**2
+        print(K0)
         print('Photonic weight, X_k^2 =', p_weight, 'Molecular weight, Y_k^2 =', e_weight)
         if plot_hopfield:
             fig1, ax1 = plt.subplots(1,1,figsize = (2,2))
@@ -1385,7 +1381,8 @@ class HTC:
             ax1.set_title('Hopfield coefficients')
             ax1.set_xlabel('k [$\mu m$]')
             ax1.legend()    
-        times, n_arr= self.calculate_evolved_n_L_all_k(tf, kspace = False, K0val = K0)
+
+        times, n_arr = self.calculate_evolved_n_L_all_k(tf, kspace = False, K0val = K0)
         times *= self.EV_TO_FS # rescale for plotting
         n_0 = n_arr[0,:]
         msd_val = np.average(self.params['delta_r']*self.Ks, weights=n_0) # position of weighted mean (i.e ~ position of peak)
@@ -1395,14 +1392,13 @@ class HTC:
             msd_val = np.average(self.params['delta_r']*self.Ks, weights=n_i) # weighted mean
             msd_arr = np.append(msd_arr, msd_val)
         
-        def f(t, D, po):
-            return D * t**po + msd_arr[0]
-        def v(t, D, po):
-            return D * po *np.ones_like(t) #* t  #**(po-1)
-                    
-        popt, pcov = curve_fit(f, times, msd_arr, bounds=([0,np.inf])) # [0,1], [np.inf, np.inf]
-        fit_data = f(times, popt[0], popt[1])
-        fit_v_of_msd = v(times, popt[0], popt[1])
+        def f(t,D):
+            return D*t + msd_arr[0] 
+        def v(t,D):
+            return D*np.ones(len(t))  
+            
+        popt, pcov = curve_fit(f, times, msd_arr, bounds=([0,1]))  
+        fit_data = f(times, popt[0])
         
         avg_v = 0
         if not suppress_plots:
@@ -1415,14 +1411,14 @@ class HTC:
                 dt = times[1] - times[0]
                 v_of_msd = np.gradient(msd_arr, dt)
                 ax[1].plot(times, v_of_msd, label = 'np.gradient', color = 'black')
-                ax[1].plot(times[1:], fit_v_of_msd[1:], label = 'curve_fit', ls = '--', color = 'blue') 
+                ax[1].plot(times, v(times, popt[0]), label = 'curve_fit', ls = '--', color = 'blue') 
                 avg_v = np.mean(v_of_msd)
             else:
-                if np.round(popt[1],2) == 1.0:  # set y tick spacing manually when v = const.; automatic setting makes units hard to read
+                if np.round(popt[0],2) == 1.0:  # set y tick spacing manually when v = const.; automatic setting makes units hard to read
                     ax[1].set_yticks(np.arange(0.5*fit_v_of_msd[int(np.round(len(times)/2))], 1.5*fit_v_of_msd[int(np.round(len(times)/2))], 0.2*fit_v_of_msd[int(np.round(len(times)/2))]))
                     ax[1].ticklabel_format(axis = 'y', useOffset=False)
                     ax[1].yaxis.set_major_formatter(FormatStrFormatter('%.3f'))
-                ax[1].plot(times[1:], fit_v_of_msd[1:], label = 'curve_fit', color = 'blue') # start at second entry to avoid v set to 0 at t = 0.0      
+                ax[1].plot(times, v(times, popt[0]), label = 'curve_fit', color = 'blue')     
             ax[1].set_xlabel('time [$fs$]', fontsize=14)
             ax[1].set_ylabel('$v_{md}$ [$\mu m$ $fs^{-1}$]', fontsize=14)
             for i in range(2):
@@ -1436,9 +1432,9 @@ class HTC:
             if savefig:
                 plt.savefig(fname = filename, format = 'jpg')
             plt.show()
-        return p_weight, e_weight, avg_v, fit_v_of_msd[int(np.round(len(times)/2))], popt[1]
+        return p_weight, e_weight, avg_v, v(times, popt[0])[int(np.round(len(times)/2))], popt[0]
 
-    def plot_v_wrt_k(self, K0s, tf = 100.0, npgradient = False, suppress_plots = False, relative = False, concentrations = False):
+    def plot_v_wrt_k(self, K0s = np.array([80.0]), tf = 1.1, npgradient = False, suppress_plots = False, relative = False, concentrations = False):
         """Calculates and plots the velocity of the mean position of the wavepacket by estimating the gradient of its trajectory
            through fitting a curve to it and/or by using np.gradient().
            Inputs:  K0s [float] - array of central wavenumbers of the initial population [unitless; k0s = K0s*L/(2pi)] 
@@ -1461,7 +1457,6 @@ class HTC:
 
         S = self.params['S']
         Gz = self.params['Gam_z']
-
         ind = 0
         for i in K0s:
             p_weight, e_weight, vvalnp, vval, p0 = self.plot_n_L_peak_velocity(savefig = suppress_plots, suppress_plots = suppress_plots, filename = f'v_at_k0_{i}_S_{S}.jpg', tf = tf, npgradient = npgradient, K0 = i) 
@@ -1589,7 +1584,7 @@ class HTC:
                 ax1[0].plot(times, fit_data, label = 'fit', ls = '--') 
                 ax1[0].set_xlabel('time [$fs$]', fontsize=14)
                 ax1[0].set_ylabel('md [$\mu m$]', fontsize=14)
-                ax1[1].plot(times[1:], v(times, popt[0])[1:], label = 'curve_fit', marker = '.') # start at second entry to avoid v set to 0 at t = 0.0      
+                ax1[1].plot(times, v(times, popt[0]), label = 'curve_fit', marker = '.')     
         ax[0].plot(Svals, fit_v_of_msd/v_L, marker = '.', ls = '--', color = 'blue')      
         ax[0].set_xlabel('$S$', fontsize=14)
         avg_vs = np.ones_like(Gam_z, dtype = float)
@@ -1624,7 +1619,7 @@ class HTC:
                 ax2[0].plot(times, fit_data, label = 'fit', ls = '--') 
                 ax2[0].set_xlabel('time [$fs$]', fontsize=14)
                 ax2[0].set_ylabel('md [$\mu m$]', fontsize=14)
-                ax2[1].plot(times[1:], v(times, popt[0])[1:], label = 'curve_fit', marker = '.') # start at second entry to avoid v set to 0 at t = 0.0          
+                ax2[1].plot(times, v(times, popt[0]), label = 'curve_fit', marker = '.')         
         ax[1].plot(Gam_z, fit_v_of_msd/v_L, marker = '.', ls = '--', color = 'blue')  
         ax[1].set_xlabel('$\Gamma_z$', fontsize=14)
 
