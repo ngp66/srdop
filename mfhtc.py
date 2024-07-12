@@ -337,6 +337,7 @@ class HTC:
         if T==np.inf:
             return (1/self.Nnu) * np.eye(self.Nnu)
         Z = self.partition(T)
+        print(Z)
         ps = [np.exp(-n * self.params['omega_nu'] / T) for n in range(self.Nnu)]
         return (1/Z) * np.diag(ps)
         
@@ -529,7 +530,7 @@ class HTC:
            Inputs:  l0val [array of floats] - values of the matrix lambda_0 at all wavectors self.Ks
                     lpval [array of floats] - values of the matrix lambda_+ at all wavectors self.Ks
            Outputs: n_B_r [array of floats] - bright state populations at all positions in real space """
-        #print(np.shape(l0), np.shape(lp))
+
         zlp = contract('i,in->n', self.consts['zetap'], lpval) # zeta(i+)<lambda(i+)>
         zzlplp = np.outer(zlp, np.conj(zlp)) # zeta(i+)zeta(j+)<lambda(i+)><lambda(j-)>
         zzzl0 = contract('a,an->n', self.consts['zetazeta'], l0val)
@@ -814,21 +815,21 @@ class HTC:
         
         K0val = self.params['K_0']
         self.plot_group_velocities(savefig = savefigs)
-        self.plot_wrt_S(Svals = np.arange(0.0,10.1,1.0), Gam_z = np.arange(0,0.04,0.002), tf = 20.1, all_plots = False, savefig = savefigs)
-        times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr, asig_r_arr = self.calculate_evolved_observables_all_k(tf, kspace = kspace, K0val = K0val, plot_all = False)
+        self.plot_wrt_S(Svals = np.arange(0.0,10.1,1.0), Gam_z = np.arange(0,0.04,0.002), tf = 20.1, all_plots = True, savefig = savefigs)
+        times_arr, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr, asig_r_arr = self.calculate_evolved_observables_all_k(tf, kspace = kspace, K0val = K0val, plot_all = False)
+        times_arr *= self.EV_TO_FS # convert to femtoseconds for plotting
         self.plot_initial_populations(savefig = savefigs, kspace = kspace, K0val = K0val)
-        self.plot_msd_motion(times = times, n_arr = n_k_arr, n_k = True, n_L = False, n_B = False, n_D = False, tf = None, K0 = K0val, savefig = True)
-        self.plot_msd_motion(times = times, n_arr = n_L_arr, n_k = False, n_L = True, n_B = False, n_D = False, tf = None, K0 = K0val, savefig = True)
-        self.plot_msd_motion(times = times, n_arr = n_B_arr, n_k = False, n_L = False, n_B = True, n_D = False, tf = None, K0 = K0val, savefig = True)
-        self.plot_msd_motion(times = times, n_arr = n_D_arr, n_k = False, n_L = False, n_B = False, n_D = True, tf = None, K0 = K0val, savefig = True)
-        self.plot_total_dark_population_growth(times = times, n_B_arr = n_B_arr, n_D_arr = n_D_arr, tf = None, K0val = K0val, savefig = savefigs)
-        self.plot_photon_exciton_current(times = times, asig_arr = asig_r_arr, tf = None, K0val = K0val, savefig = savefigs)
+        self.plot_msd_motion(times = times_arr, n_arr_B = n_B_arr, n_arr_D = n_D_arr, n_arr_L = n_L_arr, n_arr_k = n_k_arr, tf = None, K0 = K0val, savefig = savefigs)
+        self.plot_waterfall(times = times_arr, n_k_arr = n_k_arr, n_B_arr = None, n_D_arr = None, n_L_arr = None, n_L = False, n_B = False, n_D = False, n_k = True, savefig = True, tf = None, kspace = False, legend = False, K0vals = np.array([K0val]))
+        self.plot_total_dark_population_growth(times = times_arr, n_B_arr = n_B_arr, n_D_arr = n_D_arr, tf = None, K0val = K0val, savefig = savefigs)
+        self.plot_photon_exciton_current(times = times_arr, asig_arr = asig_r_arr, tf = None, K0val = K0val, savefig = savefigs)
         if fixed_position_index != None:
-            self.plot_evolution(times = times, n_k_arr = n_k_arr[:,fixed_position_index], n_B_arr = n_B_arr[:,fixed_position_index], n_D_arr = n_D_arr[:,fixed_position_index], kspace = False, savefig = False)
+            self.plot_evolution(times = times_arr, n_k_arr = n_k_arr[:,fixed_position_index], n_B_arr = n_B_arr[:,fixed_position_index], n_D_arr = n_D_arr[:,fixed_position_index], kspace = False, savefig = False)
+        return times_arr, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr, asig_r_arr
         
     def plot_all_many_Ks(self, tf, kspace = False, K0s = np.arange(10.0,120.0,10.0), savefigs = False):
         times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr, asig_r_arr = self.calculate_evolved_observables_all_k(tf, kspace = kspace, K0val = None, K0s = K0s, plot_all = True)
-        self.plot_n_D_wrt_k(times = times, n_D_arr = n_D_arr, tf = None, K0vals = K0s, savefig = savefigs)
+        self.plot_n_D_wrt_k(times = times, n_D_arr = n_D_arr, tf = None, K0vals = K0s, concentrations = False, savefig = savefigs)
             
     def plot_group_velocities(self, savefig = False):
         """Plots cavity velocity and theoretical group velocities of upper and lower polariton as a function of wavenumber K = k*2*pi/L.
@@ -862,9 +863,10 @@ class HTC:
                  fixed_position_index [int] - index of the r/k array at which the evolution is evaluated
                  kspace [bool] - if True, plot in k space. If False, plot in real space
                  savefig [bool] - if True, saves plot as 'evolution.jpg' """
+
         if tf != None:
             times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr, asig_r_arr = self.calculate_evolved_observables_fixed_k(tf, fixed_position_index, kspace = kspace)
-        times *= self.EV_TO_FS # convert to femtoseconds for plotting
+            times *= self.EV_TO_FS # convert to femtoseconds for plotting
         fig, ax = plt.subplots(1,1,figsize = (6,4))
         ax.plot(times, n_B_arr, label = '$n_{B}$')
         ax.scatter(times, n_B_arr, marker = '.')
@@ -880,7 +882,7 @@ class HTC:
             plt.savefig(fname = 'evolution.jpg', format = 'jpg')
         plt.show()
             
-    def plot_waterfall(self, n_L = False, n_B = False, n_D = False, n_k = False, savefig = False, tf = 101.1, kspace = False, legend = False, step = 100, K0vals = np.array([50.0])):
+    def plot_waterfall(self, times = None, n_k_arr = None, n_B_arr = None, n_D_arr = None, n_L_arr = None, n_L = False, n_B = False, n_D = False, n_k = False, savefig = False, tf = None, kspace = False, legend = False, step = None, K0vals = np.array([50.0])):
         """Plots selected time snapshot of the evolution of either the lower polariton, the bright or the photon population as a waterfall plot.
 
         Inputs:  n_L [bool] - if True, plot lower polariton population
@@ -895,13 +897,16 @@ class HTC:
                  by 2*step*self.dt are plotted
                  K0vals [float] - array of central wavenumbers of the intial populations [unitless; k0 = K0*L/(2pi)] """
         
-        slices = np.arange(0.0, tf, step)
-        slices *= self.EV_TO_FS # convert to femtoseconds for plotting
         fig, ax = plt.subplots(1,1,figsize=(10,6), layout = 'tight')
-        colors = plt.cm.coolwarm(np.linspace(0,1,len(slices)))
         for K0val in K0vals:
-            times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr, asig_arr = self.calculate_evolved_observables_all_k(tf, kspace = kspace, K0val = K0val)
-            times *= self.EV_TO_FS # convert to femtoseconds for plotting
+            if tf != None:
+                times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr, asig_arr = self.calculate_evolved_observables_all_k(tf, kspace = kspace, K0val = K0val)
+                times *= self.EV_TO_FS # convert to femtoseconds for plotting
+            if step == None:
+                step = times[-1]/10
+            step *= self.EV_TO_FS # convert to femtoseconds for plotting
+            slices = np.linspace(0.0, times[-1], 8)
+            colors = plt.cm.coolwarm(np.linspace(0,1,len(slices)))
             if n_B:
                 n_arr = n_B_arr
                 ax.set_ylabel('$n_{B}(r_n)$')       
@@ -964,7 +969,7 @@ class HTC:
 
         if tf != None:
             times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr, asig_arr = self.calculate_evolved_observables_all_k(tf, kspace = False, K0val = K0val)
-        times *= self.EV_TO_FS # convert to femtoseconds for plotting
+            times *= self.EV_TO_FS # convert to femtoseconds for plotting
         fig, ax = plt.subplots(1,1,figsize=(10,6), layout = 'tight')
 
         S = self.params['S']
@@ -988,16 +993,15 @@ class HTC:
             plt.savefig(fname = f'dark_state_growth_rate_K0_{K0val}.jpg', format = 'jpg')
         plt.show()
         
-    def plot_msd_motion(self, times = None, n_arr = None, n_k = False, n_L = False, n_B = False, n_D = False, tf = None, K0 = 50.0, savefig = False):
+    def plot_msd_motion(self, times = None, n_arr_B = None, n_arr_D = None, n_arr_L = None, n_arr_k = None, tf = None, K0 = 50.0, savefig = False):
         """Plots displacement of peak of either photonic, lower polariton, bright or dark state population.
         
         Inputs:  times [float] - array of time values corresponding to evolved array N_ARR. If None, tf must be specified, so that
                  the evolution of is performed inside the function
-                 n_arr [float] - array of lower polariton population values at each time in TIMES
-                 n_k [bool] - if True, plots motion of photonic wavepacket
-                 n_L [bool] - if True, plots motion of lower polariton wavepacket
-                 n_B [bool] - if True, plots motion of bright state wavepacket
-                 n_D [bool] - if True, plots motion of dark state wavepacket
+                 n_B_arr [float] - array of bright population values at times TIMES. 
+                 n_D_arr [float] - array of dark population values at times TIMES
+                 n_L_arr [float] - array of lower polariton population values at times TIMES. 
+                 n_k_arr [float] - array of photonic population values at times TIMES
                  tf [float] - integration time in physical units. Must be specified if TIMES and N_ARR are not provided
                  (conversion to femtoseconds performed internally)
                  kspace [bool] - if True, time snapshots plotted over the array of K-values self.Ks. If False, plot in real space
@@ -1006,35 +1010,33 @@ class HTC:
 
         if tf != None:
             times, n_arr = self.calculate_evolved_n_L_all_k(tf, kspace = False, K0val = K0)
-        times *= self.EV_TO_FS # rescale for plotting
-        n_0 = n_arr[0,:]
-        msd_val = np.average(self.params['delta_r']*self.Ks, weights=n_0) # position of weighted mean (i.e ~ position of peak)
-        msd_arr = np.array([msd_val])
+            times *= self.EV_TO_FS # rescale for plotting
+        n_0_B = n_arr_B[0,:]
+        msd_val_B = np.average(self.params['delta_r']*self.Ks, weights=n_0_B) # position of weighted mean (i.e ~ position of peak)
+        msd_arr_B = np.array([msd_val_B])
+        n_0_D = n_arr_D[0,:]
+        msd_val_D = np.average(self.params['delta_r']*self.Ks, weights=n_0_D) # position of weighted mean (i.e ~ position of peak)
+        msd_arr_D = np.array([msd_val_D])
+        n_0_L = n_arr_L[0,:]
+        msd_val_L = np.average(self.params['delta_r']*self.Ks, weights=n_0_L) # position of weighted mean (i.e ~ position of peak)
+        msd_arr_L = np.array([msd_val_L])
+        n_0_k = n_arr_k[0,:]
+        msd_val_k = np.average(self.params['delta_r']*self.Ks, weights=n_0_k) # position of weighted mean (i.e ~ position of peak)
+        msd_arr_k = np.array([msd_val_k])
         for i in range(1, len(times)):
-            n_i = n_arr[i,:]
-            msd_val = np.average(self.params['delta_r']*self.Ks, weights=n_i) # weighted mean
-            msd_arr = np.append(msd_arr, msd_val)
+            n_i_B = n_arr_B[i,:]
+            msd_val_B = np.average(self.params['delta_r']*self.Ks, weights=n_i_B) # weighted mean
+            msd_arr_B = np.append(msd_arr_B, msd_val_B)
+            n_i_D = n_arr_D[i,:]
+            msd_val_D = np.average(self.params['delta_r']*self.Ks, weights=n_i_D) # weighted mean
+            msd_arr_D = np.append(msd_arr_D, msd_val_D)
+            n_i_L = n_arr_L[i,:]
+            msd_val_L = np.average(self.params['delta_r']*self.Ks, weights=n_i_L) # weighted mean
+            msd_arr_L = np.append(msd_arr_L, msd_val_L)
+            n_i_k = n_arr_k[i,:]
+            msd_val_k = np.average(self.params['delta_r']*self.Ks, weights=n_i_k) # weighted mean
+            msd_arr_k = np.append(msd_arr_k, msd_val_k)
         fig, ax = plt.subplots(1,1,figsize=(6,4), layout = 'tight')
-        if n_k:
-            fig.suptitle('Motion of MD of photonic population', fontsize=16)
-            ax.plot(times, msd_arr, label = '$n_k$', marker = '.', color = 'black') 
-            if savefig:
-                plt.savefig(fname = 'msd_motion_n_k.jpg', format = 'jpg')
-        if n_L:
-            fig.suptitle('Motion of MD of lower polariton population', fontsize=16)
-            ax.plot(times, msd_arr, label = '$n_L$', marker = '.', color = 'black') 
-            if savefig:
-                plt.savefig(fname = 'msd_motion_n_L.jpg', format = 'jpg')
-        if n_D:
-            fig.suptitle('Motion of MD of dark state population', fontsize=16)
-            ax.plot(times, msd_arr, label = '$n_D$', marker = '.', color = 'black') 
-            if savefig:
-                plt.savefig(fname = 'msd_motion_n_D.jpg', format = 'jpg')
-        if n_B:
-            fig.suptitle('Motion of MD of bright state population', fontsize=16)
-            ax.plot(times, msd_arr, label = '$n_B$', marker = '.', color = 'black') 
-            if savefig:
-                plt.savefig(fname = 'msd_motion_n_B.jpg', format = 'jpg')
         ax.set_xlabel('time [$fs$]', fontsize=14)
         ax.set_ylabel('md [$\mu m$]', fontsize=14)
         ax.minorticks_on()
@@ -1042,7 +1044,14 @@ class HTC:
         for axis in ['top','bottom','left','right']:
             ax.spines[axis].set_linewidth(1.3)
         ax.grid(alpha = 0.2)
+        fig.suptitle('Motion of MD of different populations', fontsize=16)
+        ax.plot(times, msd_arr_B, label = 'n_B', marker = '.', color = 'black') 
+        ax.plot(times, msd_arr_D, label = 'n_D', marker = '.', color = 'blue') 
+        ax.plot(times, msd_arr_L, label = 'n_L', marker = '.', color = 'purple') 
+        ax.plot(times, msd_arr_k, label = 'n_k', marker = '.', color = 'orange') 
         ax.legend()    
+        if savefig:
+            plt.savefig(fname = 'msd_motion.jpg', format = 'jpg')
         plt.show()
         
     def plot_photon_exciton_current(self, times = None, asig_arr = None, tf = None, K0val = 50.0, savefig = False):
@@ -1058,7 +1067,7 @@ class HTC:
         
         if tf != None:
             times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr, asig_arr = self.calculate_evolved_observables_all_k(tf, kspace = False, K0val = K0val)
-        times *= self.EV_TO_FS # convert to femtoseconds for plotting
+            times *= self.EV_TO_FS # convert to femtoseconds for plotting
         fig, ax = plt.subplots(1,1,figsize=(10,6), layout = 'tight')
         S = self.params['S']
         Gz = self.params['Gam_z']
@@ -1069,7 +1078,7 @@ class HTC:
         ax.set_title('Photon-exciton current')
         ax.minorticks_on()
         ax.set_xlabel('$t$ $[\mu m fs^{-1}]$')
-        ax.set_ylabel('$igN_E(<a_m sig_n^+> - <a_m^+ sig_n^->)$')
+        ax.set_ylabel('$igN_E(<a_m \sigma_n^+> - <a_m^+ \sigma_n^->)$')
         ax.tick_params(axis="both", direction="in", which="both", right=True, top=True, labelsize=13)
         for axis in ['top','bottom','left','right']:
             ax.spines[axis].set_linewidth(1.3)
@@ -1079,7 +1088,7 @@ class HTC:
             plt.savefig(fname = f'asig_current_K0_{K0val}.jpg', format = 'jpg')
         plt.show()
         
-    def plot_n_D_wrt_k(self, times = None, n_D_arr = None, tf = 10.1, K0vals = np.array([50.0]), savefig = False):
+    def plot_n_D_wrt_k(self, times = None, n_D_arr = None, tf = 10.1, K0vals = np.array([50.0]), concentrations = False, savefig = False):
         """Plots total dark state population as a function of central wavenumber K0.
 
         Inputs:  times [float] - array of times corresponding to the evolved array N_D_ARR. If None, then tf 
@@ -1089,6 +1098,7 @@ class HTC:
                                TIMES, N_D_ARR not specified. Note that tf must be set to NONE if plot_all is used.
                               (transformation to femtoseconds performed internally by code)
                  K0vals [float] - array of central wavenumbers of the intial population [unitless; k0 = K0*L/(2pi)]
+                 concentrations [bool] - if True, plot w.r.t. photonic concentration |X_k|^2. If False, x-axis is K0vals.
                  savefig [bool] - if True, saves plot as 'dark_state_wrt_k.jpg'"""
         
         fig, ax = plt.subplots(1,1,figsize=(10,6), layout = 'tight')
@@ -1099,11 +1109,11 @@ class HTC:
         p_weights = np.ones_like(K0vals, dtype = float)
         if tf != None:
             times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr, asig_arr = self.calculate_evolved_observables_all_k(tf = tf, kspace = False, K0val = None, plot_all = True, K0s = K0vals)
+            times *= self.EV_TO_FS # convert to femtoseconds for plotting
         for K0val in K0vals:
             k_index = np.where(self.Ks == K0val) #self.params['K_0'])
             p_weight = (np.fft.fftshift(self.coeffs['X_k'])[k_index])**2
             e_weight = (np.fft.fftshift(self.coeffs['Y_k'])[k_index])**2
-            times *= self.EV_TO_FS # convert to femtoseconds for plotting
             n_arr = n_D_arr
             m = np.where(K0vals == K0val)
             ax.set_ylabel('$n_{D}$')
@@ -1112,7 +1122,11 @@ class HTC:
             p_weights[m] *= p_weight
             print('Current K0val =', m[0])
 
-        ax.plot(p_weights, n_vals, marker = '.', ls = '--', color = 'blue', label = 'n_D')
+        if concentrations:
+            ax.plot(p_weights, n_vals, marker = '.', ls = '--', color = 'blue', label = 'n_D')
+        else:
+            ax.plot(K0vals, n_vals, marker = '.', ls = '--', color = 'blue', label = 'n_D')
+    
         ax.set_xlabel('$X_k^2$')
         ax.set_title(f'Dark state population after {times[-1]:.2E} fs (S = {S}, $\Gamma_z$ = {Gz})')
         ax.minorticks_on()
@@ -1384,7 +1398,7 @@ class HTC:
         def f(t, D, po):
             return D * t**po + msd_arr[0]
         def v(t, D, po):
-            return D * po * t**(po-1)
+            return D * po *np.ones_like(t) #* t  #**(po-1)
                     
         popt, pcov = curve_fit(f, times, msd_arr, bounds=([0,np.inf])) # [0,1], [np.inf, np.inf]
         fit_data = f(times, popt[0], popt[1])
@@ -1540,10 +1554,10 @@ class HTC:
         fig, ax = plt.subplots(1,2,figsize = (9,4.5), layout = 'tight')
         K0 = self.params['K_0']
         v_c, v_L, v_U = self.group_velocity_expected(Ks_auto = False, all_Ks = np.array([K0]))
-        def f(t, D, po):
-            return D * t**po + msd_arr[0]
-        def v(t, D, po):
-            return D * po * t**(po-1)
+        def f(t,D):
+            return D*t + msd_arr[0] 
+        def v(t,D):
+            return D*np.ones(len(t)) 
         for s in Svals:
             self.make_coeffs(S = s, Gam_z = np.array([0.0]))
             k_index = np.where(self.Ks == K0) 
@@ -1560,9 +1574,9 @@ class HTC:
                 msd_val = np.average(self.params['delta_r']*self.Ks, weights=n_i) # weighted mean
                 msd_arr = np.append(msd_arr, msd_val)
                     
-            popt, pcov = curve_fit(f, times, msd_arr, bounds=([0,1], [np.inf, np.inf])) 
-            fit_data = f(times, popt[0], popt[1])
-            fit_v_of_msd[np.where(Svals==s)] *= v(times, popt[0], popt[1])[int(np.round(len(times)/2))]
+            popt, pcov = curve_fit(f, times, msd_arr, bounds=([0,1]))  
+            fit_data = f(times, popt[0])
+            fit_v_of_msd[np.where(Svals==s)] *= v(times, popt[0])[int(np.round(len(times)/2))] 
     
             dt = times[1] - times[0]
             v_of_msd = np.gradient(msd_arr, dt)
@@ -1575,10 +1589,9 @@ class HTC:
                 ax1[0].plot(times, fit_data, label = 'fit', ls = '--') 
                 ax1[0].set_xlabel('time [$fs$]', fontsize=14)
                 ax1[0].set_ylabel('md [$\mu m$]', fontsize=14)
-                ax1[1].plot(times[1:], v(times, popt[0], popt[1])[1:], label = 'curve_fit', marker = '.') # start at second entry to avoid v set to 0 at t = 0.0      
+                ax1[1].plot(times[1:], v(times, popt[0])[1:], label = 'curve_fit', marker = '.') # start at second entry to avoid v set to 0 at t = 0.0      
         ax[0].plot(Svals, fit_v_of_msd/v_L, marker = '.', ls = '--', color = 'blue')      
         ax[0].set_xlabel('$S$', fontsize=14)
-        print(fit_v_of_msd)     
         avg_vs = np.ones_like(Gam_z, dtype = float)
         fit_v_of_msd = np.ones_like(Gam_z, dtype = float)
         
@@ -1598,9 +1611,9 @@ class HTC:
                 msd_val = np.average(self.params['delta_r']*self.Ks, weights=n_i) # weighted mean
                 msd_arr = np.append(msd_arr, msd_val)
                     
-            popt, pcov = curve_fit(f, times, msd_arr, bounds=([0,1], [np.inf, np.inf])) 
-            fit_data = f(times, popt[0], popt[1])
-            fit_v_of_msd[np.where(Gam_z==Gz)] *= v(times, popt[0], popt[1])[int(np.round(len(times)/2))]
+            popt, pcov = curve_fit(f, times, msd_arr, bounds=([0,1])) 
+            fit_data = f(times, popt[0]) 
+            fit_v_of_msd[np.where(Gam_z==Gz)] *= v(times, popt[0])[int(np.round(len(times)/2))]
             dt = times[1] - times[0]
             v_of_msd = np.gradient(msd_arr, dt)
             avg_v = np.mean(v_of_msd)
@@ -1611,7 +1624,7 @@ class HTC:
                 ax2[0].plot(times, fit_data, label = 'fit', ls = '--') 
                 ax2[0].set_xlabel('time [$fs$]', fontsize=14)
                 ax2[0].set_ylabel('md [$\mu m$]', fontsize=14)
-                ax2[1].plot(times[1:], v(times, popt[0], popt[1])[1:], label = 'curve_fit', marker = '.') # start at second entry to avoid v set to 0 at t = 0.0          
+                ax2[1].plot(times[1:], v(times, popt[0])[1:], label = 'curve_fit', marker = '.') # start at second entry to avoid v set to 0 at t = 0.0          
         ax[1].plot(Gam_z, fit_v_of_msd/v_L, marker = '.', ls = '--', color = 'blue')  
         ax[1].set_xlabel('$\Gamma_z$', fontsize=14)
 
