@@ -337,7 +337,6 @@ class HTC:
         if T==np.inf:
             return (1/self.Nnu) * np.eye(self.Nnu)
         Z = self.partition(T)
-        print(Z)
         ps = [np.exp(-n * self.params['omega_nu'] / T) for n in range(self.Nnu)]
         return (1/Z) * np.diag(ps)
         
