@@ -1432,7 +1432,7 @@ class HTC:
             if savefig:
                 plt.savefig(fname = filename, format = 'jpg')
             plt.show()
-        return p_weight, e_weight, avg_v, v(times, popt[0])[int(np.round(len(times)/2))], popt[0]
+        return p_weight, e_weight, avg_v, v(times, popt[0])[int(np.round(len(times)/2))], popt[0], np.sqrt(np.diag(pcov))
 
     def plot_v_wrt_k(self, K0s = np.array([80.0]), tf = 1.1, npgradient = False, suppress_plots = False, relative = False, concentrations = False):
         """Calculates and plots the velocity of the mean position of the wavepacket by estimating the gradient of its trajectory
@@ -1459,7 +1459,8 @@ class HTC:
         Gz = self.params['Gam_z']
         ind = 0
         for i in K0s:
-            p_weight, e_weight, vvalnp, vval, p0 = self.plot_n_L_peak_velocity(savefig = suppress_plots, suppress_plots = suppress_plots, filename = f'v_at_k0_{i}_S_{S}.jpg', tf = tf, npgradient = npgradient, K0 = i) 
+            p_weight, e_weight, vvalnp, vval, p0, pcov = self.plot_n_L_peak_velocity(savefig = suppress_plots, suppress_plots = suppress_plots, filename = f'v_at_k0_{i}_S_{S}.jpg', tf = tf, npgradient = npgradient, K0 = i) 
+            print('Pcov', pcov, np.shape(pcov))
             p_weights[ind] = p_weights[ind]*p_weight
             e_weights[ind] = e_weights[ind]*e_weight
             vvalsnp[ind] = vvalsnp[ind]*vvalnp
@@ -1484,11 +1485,12 @@ class HTC:
             else:
                 if concentrations:
                     ax.plot(p_weights, 1000.0*v_L, marker = '.', label = '$v_{k0}^L$', ls = '--', color = 'black')
-                    ax.plot(p_weights, 1000.0*vvals, marker = '.', label = '$v_{obs}$', ls = '--', color = 'blue')
+                    ax.errorbar(p_weights, 1000.0*vvals, yerr=1000.0*pcov[0], marker='.', label = '$v_{obs}$', ls = '--', color = 'blue')
                     ax.set_xlabel('$X_k^2$')
                 else:
                     ax.plot(K0s, 1000.0*v_L, marker = '.', label = '$v_{k0}^L$', ls = '--', color = 'black')
-                    ax.plot(K0s, 1000.0*vvals, marker = '.', label = '$v_{obs}$', ls = '--', color = 'blue')
+                    #ax.plot(K0s, 1000.0*vvals, marker = '.', label = '$v_{obs}$', ls = '--', color = 'blue')
+                    ax.errorbar(K0s, 1000.0*vvals, yerr=1000.0*pcov[0], marker='.', label = '$v_{obs}$', ls = '--', color = 'blue')            
                     ax.set_xlabel('$K_0$')                
                 ax.set_ylabel('$v_{obs} [\mu m$ $ps^{-1}]$')
                 ax.legend()
@@ -1513,15 +1515,16 @@ class HTC:
         else:
             if concentrations:
                 ax1.plot(p_weights, 1000.0*v_L, marker = '.', label = '$v_{k0}^L$', ls = '--', color = 'black')
-                ax1.plot(p_weights, 1000.0*vvals, marker = '.', label = '$v_{obs}$', ls = '--', color = 'blue')
+                ax1.errorbar(p_weights, 1000.0*vvals, yerr=1000.0*pcov[0], marker='.', label = '$v_{obs}$', ls = '--', color = 'blue')
+                #ax1.plot(p_weights, 1000.0*vvals, marker = '.', label = '$v_{obs}$', ls = '--', color = 'blue')
                 ax1.set_xlabel('$X_k^2$')
             else:
                 ax1.plot(K0s, 1000.0*v_L, marker = '.', label = '$v_{k0}^L$', ls = '--', color = 'black')
-                ax1.plot(K0s, 1000.0*vvals, marker = '.', label = '$v_{obs}$', ls = '--', color = 'blue')
+                #ax1.plot(K0s, 1000.0*vvals, marker = '.', label = '$v_{obs}$', ls = '--', color = 'blue')
+                ax1.errorbar(K0s, 1000.0*vvals, yerr=1000.0*pcov[0], marker='.', label = '$v_{obs}$', ls = '--', color = 'blue')
                 ax1.set_xlabel('$K_0$')                
             ax1.set_ylabel('$v_{obs} [\mu m$ $ps^{-1}]$')
             ax1.legend()
-            
         ax1.minorticks_on()
         ax1.tick_params(axis="both", direction="in", which="both", right=True, top=True, labelsize=13)
         for axis in ['top','bottom','left','right']:
