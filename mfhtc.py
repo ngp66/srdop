@@ -73,7 +73,6 @@ class HTC:
             'dt': 0.5, # determines interval at which solution is evaluated. Does not effect the accuracy of solution, only the grid at which observables are recorded
             'exciton': False, # if True, initial state is pure exciton; if False, a lower polariton initial state is created
             'photon': False, # if True, initial state is pure exciton; if False, a lower polariton initial state is created
-            #'lowpass': 0.01, # used for smoothing oscillations in observable plots
             }
 
     @classmethod
@@ -896,7 +895,7 @@ class HTC:
                  very large number of slices"""
 
         fig, ax = plt.subplots(1,1,figsize=(10,6), layout = 'tight')
-        fig2, ax2 = plt.subplots(1,1,figsize=(10,6), layout = 'tight')
+        #fig2, ax2 = plt.subplots(1,1,figsize=(10,6), layout = 'tight')
         for K0val in K0vals:
             if tf != None:
                 times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr, asig_arr = self.calculate_evolved_observables_all_k(tf, kspace = kspace, K0val = K0val)
@@ -921,8 +920,8 @@ class HTC:
             for i in range(num_slices):
                 index = int(slices[i])
                 n_i = n_arr[index,:]
-                #var = (rs - np.ones_like(rs)*rs[np.where(n_i == np.max(n_i))[0]])**2
-                #std = np.sqrt(np.sum(var)/len(rs)) #std(n_i)
+                #var = (rs - np.ones_like(rs)*rs[np.where(n_i == np.max(n_i))[0]])**2 #not exact: takes maximum rather than mean; mean often not in n_i values
+                #std = np.sqrt(np.sum(var)/len(rs))
                 K0_ind = np.where(K0vals == K0val)[0]
                 #ax2.scatter(times[index], std, color = 'blue', marker = '.')
                 if len(K0_ind) == 0:
@@ -940,7 +939,7 @@ class HTC:
             ax.set_xlabel('$k [\mu m^{-1}]$')
         else:
             ax.set_xlabel('$r_n [\mu m]$')
-        ax.set_title('Time Snapshots of Wavepacket Evolution')
+        ax.set_title('Wavepacket Evolution')
         ax.minorticks_on()
         ax.tick_params(axis="both", direction="in", which="both", right=True, top=True, labelsize=13)
         for axis in ['top','bottom','left','right']:
@@ -1056,9 +1055,10 @@ class HTC:
         ax.legend()    
         if savefig:
             plt.savefig(fname = 'msd_motion.jpg', format = 'jpg')
+
         plt.show()
         
-    def plot_photon_exciton_current(self, times = None, asig_arr = None, tf = None, K0val = 50.0, savefig = False):
+    def plot_photon_exciton_current(self, times = None, asig_arr = None, tf = None, K0val = 80.0, savefig = False):
         """Plots photon-exciton current igN_E(<a_m sig_n+> - <a_m+ sig_n->) over time.
 
         Inputs:  times [float] - array of times corresponding to the evolved arrays N_B_ARR and N_D_ARR. If None, then tf 
@@ -1068,9 +1068,7 @@ class HTC:
                               (transformation to femtoseconds performed internally by code)
                  K0val [float] - central wavenumber of the intial population [unitless; k0 = K0*L/(2pi)] 
                  savefig [bool] - if True, saves plot as 'asig_current.jpg'"""
-        
-        if K0val == None:
-            K0val = self.params['K_0']        
+              
         if tf != None:
             times, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr, asig_arr = self.calculate_evolved_observables_all_k(tf, kspace = False, K0val = K0val)
             times *= self.EV_TO_FS # convert to femtoseconds for plotting
@@ -1084,7 +1082,7 @@ class HTC:
         ax.set_title('Photon-exciton current')
         ax.minorticks_on()
         ax.set_xlabel('$t$ $[fs]$')
-        ax.set_ylabel('$igN_E(<a_m \sigma_n^+> - <a_m^+ \sigma_n^->)$')
+        ax.set_ylabel('$\sum_{n} igN_E(<a_n \sigma_n^+> - <a_n^+ \sigma_n^->)$')
         ax.tick_params(axis="both", direction="in", which="both", right=True, top=True, labelsize=13)
         for axis in ['top','bottom','left','right']:
             ax.spines[axis].set_linewidth(1.3)
@@ -1094,7 +1092,7 @@ class HTC:
             plt.savefig(fname = f'asig_current_K0_{K0val}.jpg', format = 'jpg')
         plt.show()
         
-    def plot_n_D_wrt_k(self, times = None, n_D_arr = None, tf = 10.1, K0vals = np.array([50.0]), concentrations = False, savefig = False):
+    def plot_n_D_wrt_k(self, times = None, n_D_arr = None, tf = 10.1, K0vals = np.array([80.0]), concentrations = False, savefig = False):
         """Plots total dark state population as a function of central wavenumber K0.
 
         Inputs:  times [float] - array of times corresponding to the evolved array N_D_ARR. If None, then tf 
@@ -1109,9 +1107,7 @@ class HTC:
         
         fig, ax = plt.subplots(1,1,figsize=(10,6), layout = 'tight')
         S = self.params['S']
-        Gz = self.params['Gam_z']
-        if K0vals == None:
-            K0vals = np.array([self.params['K_0']])        
+        Gz = self.params['Gam_z']     
         n_vals = np.ones_like(K0vals, dtype = float)
         p_weights = np.ones_like(K0vals, dtype = float)
         if tf != None:
@@ -1146,7 +1142,7 @@ class HTC:
             plt.savefig(fname = f'dark_state_wrt_k_S_{S}_Gz_{Gz}.jpg', format = 'jpg')
         plt.show()
         
-    def plot_initial_populations(self, savefig = False, kspace = False, K0val = 40.0):
+    def plot_initial_populations(self, savefig = False, kspace = False, K0val = 80.0):
         """Plots upper, lower polariton and photonic populations on one figure in either k space or real space. 
            Plots molecular, bright and dark populations in real space on another figure.
 
@@ -1155,8 +1151,6 @@ class HTC:
                     Note that second figure is always in real space
                     K0 [float] - central wavenumber of the wavepacket [unitless; k0 = 2pi/L K0]"""
 
-        if K0val == None:
-            K0val = self.params['K_0']
         state_i = self.initial_state(K0 = K0val)
         n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_k_diag = self.calculate_diagonal_elements(state_i, kspace)
         fig1, ax1 = plt.subplots(5,1,figsize = (12,10),sharex = True)
@@ -1286,7 +1280,7 @@ class HTC:
         n_L_diag = fftshift(np.diag(n_L).real) # shift back so that k=0 component is at the center
         return n_L_diag
         
-    def calculate_evolved_n_L_all_k(self, tf = 100.0, kspace = False, K0val = 50.0):
+    def calculate_evolved_n_L_all_k(self, tf = 100.0, kspace = False, K0val = 80.0):
         """Evolves self.initial_state() from time ti = 0.0 to time tf in time steps self.dt. Calculates 
            diagonal elements of populations for each time step in either real or k space.
         
@@ -1310,7 +1304,7 @@ class HTC:
             n_L_arr[i,:] = n_L_diag
         return t_fs, n_L_arr
 
-    def plot_waterfall_n_L(self, savefig = False, tf = 101.1, legend = False, step = 100, K0val = None):
+    def plot_waterfall_n_L(self, savefig = False, tf = 101.1, legend = False, step = 100, K0val = 80.0):
         """Plots selected time snapshots of the evolution of the lower polariton population as a waterfall plot in real space.
 
         Inputs:  savefig [bool] - if True, saves plot as 'plot_waterfall.jpg'
@@ -1322,8 +1316,6 @@ class HTC:
                  K0 [float] - central wavenumber of the initial population [unitless; k0 = K0*L/(2pi)]
         Outputs: r_of_nmax [array of floats] - locations of the peak at each snapshot time"""
 
-        if K0val == None:
-            K0val = self.params['K_0']
         slices = np.arange(0.0, tf, step)
         times, n_array = self.calculate_evolved_n_L_all_k(tf, kspace = False, K0val = K0val)
         times *= self.EV_TO_FS # convert to femtoseconds for plotting
@@ -1354,17 +1346,8 @@ class HTC:
         if savefig:
             plt.savefig(fname = 'plot_waterfall_n_L.jpg', format = 'jpg')
         plt.show()
-
-    def butter_lowpass_filter(self, data, cutoff, fs, order=5, axis=-1):
-        data = np.array(data)
-        b, a = butter(order, cutoff, fs=fs, btype='low')
-        padlen = 3 * max(len(a), len(b)) # default filtfilt padlength
-        if padlen >= data.shape[-1] - 1:#but must be less than data.shape[-1]-1
-            # https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.filtfilt.html#scipy.signal.filtfilt
-            padlen = max(0, data.shape[-1]-2) 
-        return filtfilt(b, a, data, axis=axis, padlen=padlen)
     
-    def plot_n_L_peak_velocity(self, tf = 1.1, npgradient = True, plot_hopfield = False, suppress_plots = False, K0 = 50.0, savefig = False, filename = 'v_rmsd.jpg'):
+    def plot_n_L_peak_velocity(self, tf = 1.1, npgradient = True, plot_hopfield = False, suppress_plots = False, K0 = 80.0, savefig = False, filename = 'v_rmsd.jpg'):
         """Plots displacement and velocity of peak of lower polariton population.
         
         Inputs:  savefig [bool] - if True, saves plots as 'filename.jpg'
@@ -1449,9 +1432,9 @@ class HTC:
             if savefig:
                 plt.savefig(fname = filename, format = 'jpg')
             plt.show()
-        return p_weight, e_weight, avg_v, v(times, popt[0])[int(np.round(len(times)/2))], popt[0], np.sqrt(np.diag(pcov))
+        return p_weight, e_weight, avg_v, v(times, popt[0])[5], v(times, popt[0])[int(np.round(len(times)/2))+5], popt[0], np.sqrt(np.diag(pcov)), times[5], times[int(np.round(len(times)/2))+5]
 
-    def plot_v_wrt_k(self, K0s = None, tf = 1.1, npgradient = False, suppress_plots = False, relative = False, concentrations = False):
+    def plot_v_wrt_k(self, K0s = np.array([80.0]), tf = 1.1, npgradient = False, suppress_plots = False, relative = False, concentrations = False):
         """Calculates and plots the velocity of the mean position of the wavepacket by estimating the gradient of its trajectory
            through fitting a curve to it and/or by using np.gradient().
            Inputs:  K0s [float] - array of central wavenumbers of the initial population [unitless; k0s = K0s*L/(2pi)] 
@@ -1466,24 +1449,23 @@ class HTC:
                     concentrations, wavepacket velocities extracted through curve fitting and np.gradient routines 
                     and powers of the curve fit [used to estimate whether transport is diffusive/ballistic]"""
 
-        if K0s == None:
-            K0s = np.array([self.params['K_0']])
         p_weights = np.ones_like(K0s)
         e_weights = np.ones_like(K0s)
         vvalsnp = np.ones_like(K0s)
-        vvals = np.ones_like(K0s)
+        vvals1 = np.ones_like(K0s)
+        vvals2 = np.ones_like(K0s)
         p0s = np.ones_like(K0s)
 
         S = self.params['S']
         Gz = self.params['Gam_z']
         ind = 0
         for i in K0s:
-            p_weight, e_weight, vvalnp, vval, p0, pcov = self.plot_n_L_peak_velocity(savefig = suppress_plots, suppress_plots = suppress_plots, filename = f'v_at_k0_{i}_S_{S}.jpg', tf = tf, npgradient = npgradient, K0 = i) 
-            print('Pcov', pcov, np.shape(pcov))
+            p_weight, e_weight, vvalnp, vval1, vval2, p0, pcov, t1, t2 = self.plot_n_L_peak_velocity(savefig = suppress_plots, suppress_plots = suppress_plots, filename = f'v_at_k0_{i}_S_{S}.jpg', tf = tf, npgradient = npgradient, K0 = i) 
             p_weights[ind] = p_weights[ind]*p_weight
             e_weights[ind] = e_weights[ind]*e_weight
             vvalsnp[ind] = vvalsnp[ind]*vvalnp
-            vvals[ind] = vvals[ind]*vval
+            vvals1[ind] = vvals1[ind]*vval1
+            vvals2[ind] = vvals2[ind]*vval2
             p0s[ind] = p0s[ind]*p0
             ind = ind+1
             assert i != 0.0, "Can't normalise v_obs with respect to v_K0 = 0. Please specify K0s different from 0.0."
@@ -1504,11 +1486,13 @@ class HTC:
             else:
                 if concentrations:
                     ax.plot(p_weights, 1000.0*v_L, marker = '.', label = '$v_{k0}^L$', ls = '--', color = 'black')
-                    ax.errorbar(p_weights, 1000.0*vvals, yerr=1000.0*pcov[0], marker='.', label = '$v_{obs}$', ls = '--', color = 'blue')
+                    ax.errorbar(p_weights, 1000.0*vvals1, yerr=1000.0*pcov[0], marker='.', label = f'v(t = {t1:.2E})', ls = '--', color = 'blue')
+                    ax.errorbar(p_weights, 1000.0*vvals2, yerr=1000.0*pcov[0], marker='.', label = f'v(t = {t2:.2E})', ls = '--', color = 'purple')
                     ax.set_xlabel('$X_k^2$')
                 else:
                     ax.plot(K0s, 1000.0*v_L, marker = '.', label = '$v_{k0}^L$', ls = '--', color = 'black')
-                    ax.errorbar(K0s, 1000.0*vvals, yerr=1000.0*pcov[0], marker='.', label = '$v_{obs}$', ls = '--', color = 'blue')            
+                    ax.errorbar(K0s, 1000.0*vvals1, yerr=1000.0*pcov[0], marker='.', label = f'v(t = {t1:.2E})', ls = '--', color = 'blue')
+                    ax.errorbar(K0s, 1000.0*vvals2, yerr=1000.0*pcov[0], marker='.', label = f'v(t = {t2:.2E})', ls = '--', color = 'purple')                    
                     ax.set_xlabel('$K_0$')                
                 ax.set_ylabel('$v_{obs} [\mu m$ $ps^{-1}]$')
                 ax.legend()
@@ -1533,11 +1517,11 @@ class HTC:
         else:
             if concentrations:
                 ax1.plot(p_weights, 1000.0*v_L, marker = '.', label = '$v_{k0}^L$', ls = '--', color = 'black')
-                ax1.errorbar(p_weights, 1000.0*vvals, yerr=1000.0*pcov[0], marker='.', label = '$v_{obs}$', ls = '--', color = 'blue')
+                ax1.errorbar(p_weights, 1000.0*vvals2, yerr=1000.0*pcov[0], marker='.', label = '$v_{obs}$', ls = '--', color = 'blue')
                 ax1.set_xlabel('$X_k^2$')
             else:
                 ax1.plot(K0s, 1000.0*v_L, marker = '.', label = '$v_{k0}^L$', ls = '--', color = 'black')
-                ax1.errorbar(K0s, 1000.0*vvals, yerr=1000.0*pcov[0], marker='.', label = '$v_{obs}$', ls = '--', color = 'blue')
+                ax1.errorbar(K0s, 1000.0*vvals2, yerr=1000.0*pcov[0], marker='.', label = '$v_{obs}$', ls = '--', color = 'blue')
                 ax1.set_xlabel('$K_0$')                
             ax1.set_ylabel('$v_{obs} [\mu m$ $ps^{-1}]$')
             ax1.legend()
