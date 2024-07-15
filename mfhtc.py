@@ -812,11 +812,11 @@ class HTC:
                      savefigs [bool] - if True, all plots saved the names outlined in their respective plotting functions"""
         
         K0val = self.params['K_0']
-        #self.plot_group_velocities(savefig = savefigs)
-        #self.plot_wrt_S(Svals = np.arange(0.0,10.1,1.0), Gam_z = np.arange(0,0.04,0.002), tf = 20.1, all_plots = True, savefig = savefigs)
+        self.plot_group_velocities(savefig = savefigs)
+        self.plot_wrt_S(Svals = np.arange(0.0,10.1,1.0), Gam_z = np.arange(0,0.04,0.002), tf = 20.1, all_plots = True, savefig = savefigs)
         times_arr, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr, asig_r_arr = self.calculate_evolved_observables_all_k(tf, kspace = kspace, K0val = K0val, plot_all = False)
         times_arr *= self.EV_TO_FS # convert to femtoseconds for plotting
-        #self.plot_initial_populations(savefig = savefigs, kspace = kspace, K0val = K0val)
+        self.plot_initial_populations(savefig = savefigs, kspace = kspace, K0val = K0val)
         self.plot_msd_motion(times = times_arr, n_arr_B = n_B_arr, n_arr_D = n_D_arr, n_arr_L = n_L_arr, n_arr_k = n_k_arr, tf = None, K0 = K0val, savefig = savefigs)
         self.plot_waterfall(times = times_arr, n_k_arr = n_k_arr, n_B_arr = None, n_D_arr = None, n_L_arr = None, n_L = False, n_B = False, n_D = False, n_k = True, savefig = savefigs, tf = None, kspace = False, legend = True, K0vals = np.array([K0val]))
         self.plot_waterfall(times = times_arr, n_k_arr = None, n_B_arr = None, n_D_arr = None, n_L_arr = n_L_arr, n_L = True, n_B = False, n_D = False, n_k = False, savefig = savefigs, tf = None, kspace = False, legend = True, K0vals = np.array([K0val]))
@@ -824,8 +824,8 @@ class HTC:
         self.plot_waterfall(times = times_arr, n_k_arr = None, n_B_arr = None, n_D_arr = n_D_arr, n_L_arr = None, n_L = False, n_B = False, n_D = True, n_k = False, savefig = savefigs, tf = None, kspace = False, legend = True, K0vals = np.array([K0val]))
         self.plot_total_dark_population_growth(times = times_arr, n_B_arr = n_B_arr, n_D_arr = n_D_arr, tf = None, K0val = K0val, savefig = savefigs)
         self.plot_photon_exciton_current(times = times_arr, asig_arr = asig_r_arr, tf = None, K0val = K0val, savefig = savefigs)
-        #if fixed_position_index != None:
-        #    self.plot_evolution(times = times_arr, n_k_arr = n_k_arr[:,fixed_position_index], n_B_arr = n_B_arr[:,fixed_position_index], n_D_arr = n_D_arr[:,fixed_position_index], kspace = False, savefig = False)
+        if fixed_position_index != None:
+            self.plot_evolution(times = times_arr, n_k_arr = n_k_arr[:,fixed_position_index], n_B_arr = n_B_arr[:,fixed_position_index], n_D_arr = n_D_arr[:,fixed_position_index], kspace = False, savefig = False)
         #return times_arr, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr, asig_r_arr
                  
     def plot_group_velocities(self, savefig = False):
@@ -1056,7 +1056,6 @@ class HTC:
         ax.legend()    
         if savefig:
             plt.savefig(fname = 'msd_motion.jpg', format = 'jpg')
-
         plt.show()
         
     def plot_photon_exciton_current(self, times = None, asig_arr = None, tf = None, K0val = 50.0, savefig = False):
