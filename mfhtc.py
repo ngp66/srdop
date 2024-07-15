@@ -657,7 +657,7 @@ class HTC:
         n_B_diag = np.fft.fftshift(np.diag(n_Bs).real) # shift back so that k=0 component is at the center
         n_D_diag = np.fft.fftshift(np.diag(n_Ds).real) # shift back so that k=0 component is at the center n_M_diag - n_B_diag
         sigsig_diag = np.fft.fftshift(np.diag(sigsigs).real) # shift back so that k=0 component is at the center
-        asig_r_diag = np.fft.fftshift(np.diag(asig_rs).real) # shift back so that k=0 component is at the center
+        asig_r_diag = np.fft.fftshift(np.diag(asig_rs).real) #fft.fftshift(np.diag(asig_rs).real) # shift back so that k=0 component is at the center
         return n_k_diag, n_M_diag, n_L_diag, n_U_diag, n_B_diag, n_D_diag, sigsig_diag, asig_r_diag
         
     def calculate_evolved_observables_fixed_k(self, tf = 100.0, fixed_position_index = 1, kspace = False, K0val = 80.0):
@@ -823,7 +823,7 @@ class HTC:
         self.plot_photon_exciton_current(times = times_arr, asig_arr = asig_r_arr, tf = None, K0val = K0val, savefig = savefigs)
         if fixed_position_index != None:
             self.plot_evolution(times = times_arr, n_k_arr = n_k_arr[:,fixed_position_index], n_B_arr = n_B_arr[:,fixed_position_index], n_D_arr = n_D_arr[:,fixed_position_index], kspace = False, savefig = False)
-        return times_arr, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr, asig_r_arr
+        #return times_arr, n_k_arr, n_M_arr, n_B_arr, n_D_arr, n_L_arr, n_U_arr, sigsig_arr, asig_r_arr
                  
     def plot_group_velocities(self, savefig = False):
         """Plots cavity velocity and theoretical group velocities of upper and lower polariton as a function of wavenumber K = k*2*pi/L.
@@ -977,7 +977,7 @@ class HTC:
         ax.plot(times, n_Ds, color = 'blue', label = 'n_D', marker = '.', ls = '--')
         ax.set_title(f'Bright-dark state interconversion (S = {S}, $\Gamma_z$ = {Gz}, $K_0$ = {K0val})')
         ax.minorticks_on()
-        ax.set_xlabel('$t$ $[\mu m fs^{-1}]$')
+        ax.set_xlabel('$t$ $[fs]$')
         ax.tick_params(axis="both", direction="in", which="both", right=True, top=True, labelsize=13)
         for axis in ['top','bottom','left','right']:
             ax.spines[axis].set_linewidth(1.3)
@@ -1006,30 +1006,41 @@ class HTC:
             times, n_arr = self.calculate_evolved_n_L_all_k(tf, kspace = False, K0val = K0)
             times *= self.EV_TO_FS # rescale for plotting
         n_0_B = n_arr_B[0,:]
+        msd_arr_B, msd_arr_D, msd_arr_L, msd_arr_k = [np.zeros((len(times)), dtype=float) for _ in range(4)]
+        std_B, std_D, std_L, std_k = [np.zeros((len(times)), dtype=float) for _ in range(4)]
         msd_val_B = np.average(self.params['delta_r']*self.Ks, weights=n_0_B) # position of weighted mean (i.e ~ position of peak)
-        msd_arr_B = np.array([msd_val_B])
+        msd_arr_B[0] = msd_val_B
+        std_B[0] = np.std(n_0_B)
         n_0_D = n_arr_D[0,:]
         msd_val_D = np.average(self.params['delta_r']*self.Ks, weights=n_0_D) # position of weighted mean (i.e ~ position of peak)
-        msd_arr_D = np.array([msd_val_D])
+        msd_arr_D[0] = msd_val_D
+        std_D[0] = np.std(n_0_D)
         n_0_L = n_arr_L[0,:]
         msd_val_L = np.average(self.params['delta_r']*self.Ks, weights=n_0_L) # position of weighted mean (i.e ~ position of peak)
-        msd_arr_L = np.array([msd_val_L])
+        msd_arr_L[0] = msd_val_L
+        std_L[0] = np.std(n_0_L)
         n_0_k = n_arr_k[0,:]
         msd_val_k = np.average(self.params['delta_r']*self.Ks, weights=n_0_k) # position of weighted mean (i.e ~ position of peak)
-        msd_arr_k = np.array([msd_val_k])
+        msd_arr_k[0] = msd_val_k
+        std_k[0] = np.std(n_0_k)
         for i in range(1, len(times)):
             n_i_B = n_arr_B[i,:]
             msd_val_B = np.average(self.params['delta_r']*self.Ks, weights=n_i_B) # weighted mean
-            msd_arr_B = np.append(msd_arr_B, msd_val_B)
+            msd_arr_B[i] = msd_val_B
+            std_B[i] = np.std(n_i_B)
             n_i_D = n_arr_D[i,:]
             msd_val_D = np.average(self.params['delta_r']*self.Ks, weights=n_i_D) # weighted mean
-            msd_arr_D = np.append(msd_arr_D, msd_val_D)
+            msd_arr_D[i] = msd_val_D
+            std_D[i] = np.std(n_i_D)
             n_i_L = n_arr_L[i,:]
             msd_val_L = np.average(self.params['delta_r']*self.Ks, weights=n_i_L) # weighted mean
-            msd_arr_L = np.append(msd_arr_L, msd_val_L)
+            msd_arr_L[i] = msd_val_L
+            std_L[i] = np.std(n_i_L)
             n_i_k = n_arr_k[i,:]
             msd_val_k = np.average(self.params['delta_r']*self.Ks, weights=n_i_k) # weighted mean
-            msd_arr_k = np.append(msd_arr_k, msd_val_k)
+            msd_arr_k[i] = msd_val_k
+            std_k[i] = np.std(n_i_k)
+            
         fig, ax = plt.subplots(1,1,figsize=(6,4), layout = 'tight')
         ax.set_xlabel('time [$fs$]', fontsize=14)
         ax.set_ylabel('md [$\mu m$]', fontsize=14)
@@ -1046,6 +1057,21 @@ class HTC:
         ax.legend()    
         if savefig:
             plt.savefig(fname = 'msd_motion.jpg', format = 'jpg')
+
+        fig1, ax1 = plt.subplots(1,1,figsize=(6,4), layout = 'tight')
+        ax1.set_xlabel('time [$fs$]', fontsize=14)
+        ax1.set_ylabel('$\sigma$ [$\mu m$]', fontsize=14)
+        ax1.minorticks_on()
+        ax1.tick_params(axis="both", direction="in", which="both", right=True, top=True, labelsize=13)
+        for axis in ['top','bottom','left','right']:
+            ax1.spines[axis].set_linewidth(1.3)
+        ax1.grid(alpha = 0.2)
+        fig1.suptitle('Standard deviation of different populations', fontsize=16)
+        ax1.plot(times, std_B, label = '$\sigma(n_B)$', marker = '.', color = 'black') 
+        ax1.plot(times, std_D, label = '$\sigma(n_D)$', marker = '.', color = 'blue') 
+        ax1.plot(times, std_L, label = '$\sigma(n_L)$', marker = '.', color = 'purple') 
+        ax1.plot(times, std_k, label = '$\sigma(n_k)$', marker = '.', color = 'orange') 
+        ax1.legend()
         plt.show()
         
     def plot_photon_exciton_current(self, times = None, asig_arr = None, tf = None, K0val = 50.0, savefig = False):
@@ -1071,7 +1097,7 @@ class HTC:
         ax.plot(times, asigs, color = 'black', label = f'S = {S}, $\Gamma_z$ = {Gz}, $K_0$ = {K0val}', marker = '.', ls = '--')
         ax.set_title('Photon-exciton current')
         ax.minorticks_on()
-        ax.set_xlabel('$t$ $[\mu m fs^{-1}]$')
+        ax.set_xlabel('$t$ $[fs]$')
         ax.set_ylabel('$igN_E(<a_m \sigma_n^+> - <a_m^+ \sigma_n^->)$')
         ax.tick_params(axis="both", direction="in", which="both", right=True, top=True, labelsize=13)
         for axis in ['top','bottom','left','right']:
@@ -1663,7 +1689,7 @@ if __name__ == '__main__':
         'sig_0': 4.0, # s.d. of initial wavepacket
         'atol': 1e-7, # solver tolerance
         'rtol': 1e-7, # solver tolerance
-        'dt': 0.5, # determines interval at which solution is evaluated. Does not effect the accuracy of solution, only the grid at which observables are recorded
+        'dt': 5, # determines interval at which solution is evaluated. Does not effect the accuracy of solution, only the grid at which observables are recorded
         'exciton': False, # if True, initial state is pure exciton; if False, a lower polariton initial state is created
         'photon': False, # if True, initial state is pure exciton; if False, a lower polariton initial state is created
         }
